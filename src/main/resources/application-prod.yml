@@ -7,7 +7,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: none         # don't let Hibernate change the schema
+      ddl-auto: none         
     properties:
       hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
     open-in-view: false
@@ -16,7 +16,7 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
-    baseline-version: 2      # <-- important: DB already matches up to V2
+    baseline-version: 2      
     schemas: public
 
   sql:

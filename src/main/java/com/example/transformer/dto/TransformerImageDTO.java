@@ -11,7 +11,7 @@ public record TransformerImageDTO(
     EnvCondition envCondition,
     String filename,
     java.time.LocalDateTime createdAt,
-    String contentType,     // <- add
-    Long sizeBytes,          // <- add
+    String contentType,     
+    Long sizeBytes,          
     Long inspectionId 
 ) {}

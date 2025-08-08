@@ -10,7 +10,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileTime;  // <-- add this
+import java.nio.file.attribute.FileTime;  
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -19,10 +19,7 @@ import java.util.stream.Stream;
 
 import static java.util.Comparator.comparing;
 
-/**
- * Serves transformer images both as public file URLs (existing behavior)
- * and as base64-encoded data URIs with metadata (new endpoints).
- */
+
 @RestController
 @RequestMapping("/api/transformers")
 public class TransformerImageController {
@@ -33,9 +30,7 @@ public class TransformerImageController {
     this.root = Path.of(rootDir).toAbsolutePath().normalize();
   }
 
-  // ----------------------------
-  // Existing URL-list endpoints
-  // ----------------------------
+  
 
   @GetMapping(value = "/{id}/maintenance", produces = MediaType.APPLICATION_JSON_VALUE)
   public List<String> listMaintenance(@PathVariable Long id) throws IOException {
@@ -47,10 +42,7 @@ public class TransformerImageController {
     return listUrlsForType(id, "baseline", null);
   }
 
-  /**
-   * Optional: one endpoint with a query param ?type=MAINTENANCE|BASELINE
-   * Returns URL strings (same as the two above).
-   */
+  
   @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
   public List<String> listByType(@PathVariable Long id,
                                  @RequestParam(name = "type", required = false) String type,
@@ -160,7 +152,7 @@ public class TransformerImageController {
     String base64 = Base64.getEncoder().encodeToString(bytes);
     String dataUri = "data:" + contentType + ";base64," + base64;
 
-    // If you also want to include the public URL alongside base64:
+    
     String publicUrl = toPublicUrl(root.relativize(file));
 
     return new ImageDto(filename, contentType, size, lastModified.toString(), dataUri, publicUrl);

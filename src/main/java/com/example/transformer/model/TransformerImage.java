@@ -28,7 +28,7 @@ public class TransformerImage {
 
   @Column(nullable = false) private String uploader;
 
-  // file metadata (we’ll implement storage next)
+  
   private String filename;
   private String contentType;
   private Long sizeBytes;

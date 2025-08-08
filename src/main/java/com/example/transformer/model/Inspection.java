@@ -1,4 +1,4 @@
-// src/main/java/com/example/transformer/model/Inspection.java
+
 package com.example.transformer.model;
 
 import jakarta.persistence.*;

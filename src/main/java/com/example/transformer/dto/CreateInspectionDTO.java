@@ -1,4 +1,4 @@
-// src/main/java/com/example/transformer/dto/CreateInspectionDTO.java
+
 package com.example.transformer.dto;
 
 import com.example.transformer.model.InspectionStatus;

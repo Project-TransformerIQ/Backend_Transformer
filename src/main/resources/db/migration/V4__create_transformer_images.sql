@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS transformer_images (
     created_at TIMESTAMP(6),
     humidity DOUBLE PRECISION,
     location_note VARCHAR(255),
-    temperaturec DOUBLE PRECISION,              -- matches your code/dump field name
+    temperaturec DOUBLE PRECISION,              
     weather VARCHAR(255),
     filename VARCHAR(255),
     image_type VARCHAR(255) NOT NULL,
