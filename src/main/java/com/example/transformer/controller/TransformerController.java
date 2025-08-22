@@ -40,11 +40,10 @@ public class TransformerController {
   @PostMapping
   public Transformer create(@RequestBody @Valid TransformerDTO dto) {
     Transformer t = Transformer.builder()
-        .name(dto.name())
-        .site(dto.site())
-        .ratingKva(dto.ratingKva())
-        .latitude(dto.latitude())
-        .longitude(dto.longitude())
+        .transformerNo(dto.transformerNo())
+        .poleNo(dto.poleNo())
+        .region(dto.region())
+        .transformerType(dto.transformerType())
         .build();
     return transformers.save(t);
   }
@@ -61,11 +60,10 @@ public class TransformerController {
   @PutMapping("/{id}")
   public Transformer update(@PathVariable Long id, @RequestBody @Valid TransformerDTO dto) {
     Transformer t = get(id);
-    t.setName(dto.name());
-    t.setSite(dto.site());
-    t.setRatingKva(dto.ratingKva());
-    t.setLatitude(dto.latitude());
-    t.setLongitude(dto.longitude());
+    t.setTransformerNo(dto.transformerNo());
+    t.setPoleNo(dto.poleNo());
+    t.setRegion(dto.region());
+    t.setTransformerType(dto.transformerType());
     return transformers.save(t);
   }
 

@@ -1,11 +1,12 @@
 package com.example.transformer.dto;
 
+import com.example.transformer.model.TransformerType;
 import jakarta.validation.constraints.*;
 
 public record TransformerDTO(
-  @NotBlank String name,
-  String site,
-  @PositiveOrZero Integer ratingKva,
-  Double latitude,
-  Double longitude
+    Long id,
+    @NotBlank String transformerNo,
+    @NotBlank String poleNo,
+    @NotBlank String region,
+    @NotNull TransformerType transformerType
 ) {}

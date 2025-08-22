@@ -1,2 +1,2 @@
 package com.example.transformer.model;
-public enum ImageType { BASELINE, CURRENT }
+public enum ImageType { BASELINE, MAINTENANCE }
