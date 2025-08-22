@@ -15,10 +15,16 @@ import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import com.example.transformer.dto.CreateInspectionDTO;
+import com.example.transformer.dto.InspectionDTO;
+import com.example.transformer.model.Inspection;
+import com.example.transformer.model.InspectionStatus;
+import com.example.transformer.repository.InspectionRepository;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/transformers")
@@ -27,13 +33,16 @@ public class TransformerController {
   private final TransformerRepository transformers;
   private final TransformerImageRepository images;
   private final FileStorageService storage;
+  private final InspectionRepository inspectionRepository;
 
   public TransformerController(TransformerRepository transformers,
                                TransformerImageRepository images,
-                               FileStorageService storage) {
+                               FileStorageService storage,
+                               InspectionRepository inspectionRepository) {
     this.transformers = transformers;
     this.images = images;
     this.storage = storage;
+    this.inspectionRepository = inspectionRepository;
   }
 
   // ---- CRUD: transformers ----
@@ -148,5 +157,29 @@ public class TransformerController {
         .contentType(mt)
         .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + img.getFilename() + "\"")
         .body(res);
+  }
+  @GetMapping("/{id}/inspections")
+  public List<InspectionDTO> listInspections(@PathVariable Long id) {
+    if (!transformers.existsById(id)) throw new NotFoundException("Transformer " + id + " not found");
+    return inspectionRepository.findByTransformerIdOrderByCreatedAtDesc(id)
+        .stream().map(InspectionDTO::fromEntity).toList();
+  }
+  @PostMapping("/{id}/inspections")
+  public ResponseEntity<InspectionDTO> addInspection(@PathVariable Long id,
+                                                    @RequestBody @Valid CreateInspectionDTO body) {
+    Transformer t = transformers.findById(id)
+        .orElseThrow(() -> new NotFoundException("Transformer " + id + " not found"));
+
+    Inspection ins = Inspection.builder()
+        .transformer(t)
+        .title(body.title())
+        .inspector(body.inspector())
+        .notes(body.notes())
+        .status(body.status() == null ? InspectionStatus.OPEN : body.status())
+        .createdAt(LocalDateTime.now())
+        .build();
+
+    inspectionRepository.save(ins);
+    return ResponseEntity.status(HttpStatus.CREATED).body(InspectionDTO.fromEntity(ins));
   }
 }
