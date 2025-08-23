@@ -4,16 +4,25 @@ spring:
     driver-class-name: org.postgresql.Driver
     username: postgres
     password: dulmin
-  
+
   jpa:
     hibernate:
-      ddl-auto: update   # don’t auto-change schema; just check it
+      ddl-auto: none         # don't let Hibernate change the schema
+    properties:
+      hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+
   flyway:
     enabled: true
-    baseline-on-migrate: true   # DB already has tables -> create a baseline marker
-    # baseline-version: 1       # optional (default 1)
-  app:
-    storage:
-      root: uploads
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 2      # <-- important: DB already matches up to V2
+    schemas: public
 
+  sql:
+    init:
+      mode: never            # avoid Spring SQL init interfering
 
+app:
+  storage:
+    root: uploads
