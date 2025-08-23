@@ -83,6 +83,9 @@ public class TransformerController {
   }
 
   // ---- Upload image (baseline/maintenance) ----
+  // Expect multipart with parts:
+  //   file : binary
+  //   meta : application/json -> ImageUploadDTO { imageType, envCondition?, uploader? ... }
   @PostMapping(value = "/{id}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public TransformerImageDTO upload(@PathVariable Long id,
                                     @RequestPart("file") MultipartFile file,
@@ -95,7 +98,8 @@ public class TransformerController {
           "Baseline image requires envCondition.weather (SUNNY/CLOUDY/RAINY)");
     }
 
-    String path = storage.saveTransformerImage(id, file);
+    // 👇 NEW: tell storage which subfolder to use (baseline / maintenance)
+    String relativePath = storage.saveTransformerImage(id, meta.imageType().name(), file);
 
     TransformerImage img = images.save(
         TransformerImage.builder()
@@ -106,7 +110,7 @@ public class TransformerController {
             .filename(file.getOriginalFilename())
             .contentType(file.getContentType())
             .sizeBytes(file.getSize())
-            .storagePath(path)
+            .storagePath(relativePath) // 👈 store relative path from uploads/
             .build()
     );
 
@@ -117,8 +121,8 @@ public class TransformerController {
         img.getEnvCondition(),
         img.getFilename(),
         img.getCreatedAt(),
-        img.getContentType(),     // new
-        img.getSizeBytes()  
+        img.getContentType(),
+        img.getSizeBytes()
     );
   }
 
@@ -127,18 +131,17 @@ public class TransformerController {
   public List<TransformerImageDTO> listImages(@PathVariable Long id) {
     if (!transformers.existsById(id)) throw new NotFoundException("Transformer " + id + " not found");
     return images.findByTransformerIdOrderByCreatedAtDesc(id).stream()
-    .map(img -> new TransformerImageDTO(
-        img.getId(),
-        img.getImageType(),
-        img.getUploader(),
-        img.getEnvCondition(),
-        img.getFilename(),
-        img.getCreatedAt(),
-        img.getContentType(),     // new
-        img.getSizeBytes()        // new
-    ))
-    .toList();
-
+        .map(img -> new TransformerImageDTO(
+            img.getId(),
+            img.getImageType(),
+            img.getUploader(),
+            img.getEnvCondition(),
+            img.getFilename(),
+            img.getCreatedAt(),
+            img.getContentType(),
+            img.getSizeBytes()
+        ))
+        .toList();
   }
 
   // ---- Serve raw file for thumbnails ----
@@ -158,15 +161,18 @@ public class TransformerController {
         .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + img.getFilename() + "\"")
         .body(res);
   }
+
+  // ---- Inspections ----
   @GetMapping("/{id}/inspections")
   public List<InspectionDTO> listInspections(@PathVariable Long id) {
     if (!transformers.existsById(id)) throw new NotFoundException("Transformer " + id + " not found");
     return inspectionRepository.findByTransformerIdOrderByCreatedAtDesc(id)
         .stream().map(InspectionDTO::fromEntity).toList();
   }
+
   @PostMapping("/{id}/inspections")
   public ResponseEntity<InspectionDTO> addInspection(@PathVariable Long id,
-                                                    @RequestBody @Valid CreateInspectionDTO body) {
+                                                     @RequestBody @Valid CreateInspectionDTO body) {
     Transformer t = transformers.findById(id)
         .orElseThrow(() -> new NotFoundException("Transformer " + id + " not found"));
 
