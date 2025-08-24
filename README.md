@@ -1,6 +1,7 @@
 # Backend_Transformer
 Backend Development of the TransformerIQ
 
+install postgressql.Usepassword dulmin for super user.
 
 Replace 17 with your installed version if different.
 export PG_BIN="/c/Program Files/PostgreSQL/17/bin"
