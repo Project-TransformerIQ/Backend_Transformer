@@ -46,10 +46,10 @@ This backend works together with the [Frontend Application](https://github.com/P
 ## 👥 Team Members  
 This backend was developed by **Team WeMake Software**:  
 
-1. **Member 1** – API Design & Development  
-2. **Member 2** – Database Integration (PostgreSQL, Hibernate)  
-3. **Member 3** – Deployment & Configuration  
-4. **Member 4** – Testing & Documentation  
+1. Dulmin Dulsara 
+2. Nirosh Lakshan  
+3. Tharushi Karavita
+4. Lasith Haputhanthri 
 
 ---
 
