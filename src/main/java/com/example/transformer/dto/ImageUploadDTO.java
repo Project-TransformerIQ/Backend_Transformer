@@ -7,5 +7,6 @@ import jakarta.validation.constraints.*;
 public record ImageUploadDTO(
   @NotNull ImageType imageType,     // BASELINE or MAINTENANCE
   EnvCondition envCondition,        // REQUIRED iff imageType == BASELINE (weather must be set)
-  @NotBlank String uploader
+  @NotBlank String uploader,
+  Long inspectionId
 ) {}

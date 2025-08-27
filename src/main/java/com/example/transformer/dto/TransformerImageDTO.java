@@ -12,5 +12,6 @@ public record TransformerImageDTO(
     String filename,
     java.time.LocalDateTime createdAt,
     String contentType,     // <- add
-    Long sizeBytes          // <- add
+    Long sizeBytes,          // <- add
+    Long inspectionId 
 ) {}
