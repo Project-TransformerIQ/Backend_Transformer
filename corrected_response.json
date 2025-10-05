@@ -1,0 +1,37 @@
+{
+  "fault_regions": [
+    {
+      "dbId": 1,
+      "regionId": 1,
+      "type": "Hotspot",
+      "dominantColor": "red",
+      "colorRgb": [255, 0, 0],
+      "boundingBox": {
+        "x": 412,
+        "y": 226,
+        "width": 38,
+        "height": 40,
+        "areaPx": 1520
+      },
+      "centroid": {
+        "x": 431,
+        "y": 246
+      },
+      "aspectRatio": 0.95,
+      "elongated": false,
+      "connectedToWire": false,
+      "tag": "FAULT",
+      "confidence": 0.95
+    }
+  ],
+  "display_metadata": {
+    "id": 1,
+    "boxColors": {
+      "FAULT": "255,0,0",
+      "POTENTIAL": "255,255,0",
+      "NORMAL": "0,255,0"
+    },
+    "timestamp": "2025-10-05T13:15:00"
+  }
+}
+

@@ -2,8 +2,8 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/transformers_db
     driver-class-name: org.postgresql.Driver
-    username: postgres
-    password: dulmin
+    username: openpg
+    password: openpgpwd
 
   jpa:
     hibernate:

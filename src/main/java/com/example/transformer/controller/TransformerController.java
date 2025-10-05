@@ -3,13 +3,19 @@ package com.example.transformer.controller;
 import com.example.transformer.dto.ImageUploadDTO;
 import com.example.transformer.dto.TransformerDTO;
 import com.example.transformer.dto.TransformerImageDTO;
+import com.example.transformer.dto.ImageUploadResponseDTO;
+import com.example.transformer.dto.FaultRegionDTO;
+import com.example.transformer.dto.DisplayMetadataDTO;
 import com.example.transformer.exception.NotFoundException;
 import com.example.transformer.model.ImageType;
 import com.example.transformer.model.Transformer;
 import com.example.transformer.model.TransformerImage;
+import com.example.transformer.model.FaultRegion;
+import com.example.transformer.model.DisplayMetadata;
 import com.example.transformer.repository.TransformerImageRepository;
 import com.example.transformer.repository.TransformerRepository;
 import com.example.transformer.service.FileStorageService;
+import com.example.transformer.service.AnomalyDetectionService;
 import jakarta.validation.Valid;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +26,10 @@ import com.example.transformer.dto.InspectionDTO;
 import com.example.transformer.model.Inspection;
 import com.example.transformer.model.InspectionStatus;
 import com.example.transformer.repository.InspectionRepository;
+import com.example.transformer.repository.FaultRegionRepository;
+import com.example.transformer.repository.DisplayMetadataRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -34,15 +44,27 @@ public class TransformerController {
   private final TransformerImageRepository images;
   private final FileStorageService storage;
   private final InspectionRepository inspectionRepository;
+  private final FaultRegionRepository faultRegionRepository;
+  private final DisplayMetadataRepository displayMetadataRepository;
+  private final AnomalyDetectionService anomalyDetectionService;
+  private final ObjectMapper objectMapper;
 
   public TransformerController(TransformerRepository transformers,
                                TransformerImageRepository images,
                                FileStorageService storage,
-                               InspectionRepository inspectionRepository) {
+                               InspectionRepository inspectionRepository,
+                               FaultRegionRepository faultRegionRepository,
+                               DisplayMetadataRepository displayMetadataRepository,
+                               AnomalyDetectionService anomalyDetectionService,
+                               ObjectMapper objectMapper) {
     this.transformers = transformers;
     this.images = images;
     this.storage = storage;
     this.inspectionRepository = inspectionRepository;
+    this.faultRegionRepository = faultRegionRepository;
+    this.displayMetadataRepository = displayMetadataRepository;
+    this.anomalyDetectionService = anomalyDetectionService;
+    this.objectMapper = objectMapper;
   }
 
   // ---- CRUD: transformers ----
@@ -88,10 +110,10 @@ public class TransformerController {
   //   meta : application/json -> ImageUploadDTO { imageType, envCondition?, uploader? }
   // For MAINTENANCE: pass inspectionId as query param or form field.
   @PostMapping(value = "/{id}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  public TransformerImageDTO upload(@PathVariable Long id,
-                                    @RequestPart("file") MultipartFile file,
-                                    @RequestPart("meta") @Valid ImageUploadDTO meta,
-                                    @RequestParam(value = "inspectionId", required = false) Long inspectionId
+  public ImageUploadResponseDTO upload(@PathVariable Long id,
+                                      @RequestPart("file") MultipartFile file,
+                                      @RequestPart("meta") @Valid ImageUploadDTO meta,
+                                      @RequestParam(value = "inspectionId", required = false) Long inspectionId
   ) throws IOException {
     Transformer t = get(id);
 
@@ -142,7 +164,8 @@ public class TransformerController {
 
     TransformerImage img = images.save(entity);
 
-    return new TransformerImageDTO(
+    // Create base response
+    TransformerImageDTO imageDTO = new TransformerImageDTO(
         img.getId(),
         img.getImageType(),
         img.getUploader(),
@@ -153,6 +176,144 @@ public class TransformerController {
         img.getSizeBytes(),
         img.getInspection() == null ? null : img.getInspection().getId()
     );
+
+    Object anomalyResult = null;
+
+    // --- Anomaly detection and DB save ---
+    if (meta.imageType() == ImageType.MAINTENANCE) {
+      // Find latest baseline image
+      List<TransformerImage> baselineImages = images.findByTransformerIdAndImageTypeOrderByCreatedAtDesc(id, ImageType.BASELINE);
+
+      if (!baselineImages.isEmpty()) {
+        TransformerImage baseline = baselineImages.get(0);
+
+        try {
+          // Call Flask API with actual service
+          String flaskJson = anomalyDetectionService.detectAnomalies(
+              storage.load(baseline.getStoragePath()),
+              storage.load(img.getStoragePath())
+          );
+
+          // Parse and save to database
+          JsonNode root = objectMapper.readTree(flaskJson);
+
+          // Save fault regions
+          if (root.has("fault_regions")) {
+            JsonNode faultRegionsNode = root.get("fault_regions");
+
+            for (JsonNode fr : faultRegionsNode) {
+              FaultRegion region = new FaultRegion();
+
+              // Safe parsing with null checks
+              region.setRegionId(fr.has("id") && !fr.get("id").isNull() ? fr.get("id").asInt() : null);
+              region.setType(fr.has("type") && !fr.get("type").isNull() ? fr.get("type").asText() : null);
+              region.setDominantColor(fr.has("dominant_color") && !fr.get("dominant_color").isNull() ? fr.get("dominant_color").asText() : null);
+
+              // Parse color RGB
+              List<Integer> rgb = new ArrayList<>();
+              if (fr.has("color_rgb") && !fr.get("color_rgb").isNull()) {
+                for (JsonNode c : fr.get("color_rgb")) {
+                  if (!c.isNull()) rgb.add(c.asInt());
+                }
+              }
+              region.setColorRgb(rgb);
+
+              // Parse bounding box - handle both camelCase and snake_case
+              if (fr.has("boundingBox") && !fr.get("boundingBox").isNull()) {
+                // Handle camelCase format from Flask API
+                FaultRegion.BoundingBox bb = new FaultRegion.BoundingBox();
+                JsonNode bbNode = fr.get("boundingBox");
+                bb.setX(bbNode.has("x") && !bbNode.get("x").isNull() ? bbNode.get("x").asInt() : null);
+                bb.setY(bbNode.has("y") && !bbNode.get("y").isNull() ? bbNode.get("y").asInt() : null);
+                bb.setWidth(bbNode.has("width") && !bbNode.get("width").isNull() ? bbNode.get("width").asInt() : null);
+                bb.setHeight(bbNode.has("height") && !bbNode.get("height").isNull() ? bbNode.get("height").asInt() : null);
+                bb.setAreaPx(bbNode.has("areaPx") && !bbNode.get("areaPx").isNull() ? bbNode.get("areaPx").asInt() : null);
+
+                region.setBoundingBox(bb);
+              } else if (fr.has("bounding_box") && !fr.get("bounding_box").isNull()) {
+                // Handle snake_case format (legacy)
+                FaultRegion.BoundingBox bb = new FaultRegion.BoundingBox();
+                JsonNode bbNode = fr.get("bounding_box");
+                bb.setX(bbNode.has("x") && !bbNode.get("x").isNull() ? bbNode.get("x").asInt() : null);
+                bb.setY(bbNode.has("y") && !bbNode.get("y").isNull() ? bbNode.get("y").asInt() : null);
+                bb.setWidth(bbNode.has("width") && !bbNode.get("width").isNull() ? bbNode.get("width").asInt() : null);
+                bb.setHeight(bbNode.has("height") && !bbNode.get("height").isNull() ? bbNode.get("height").asInt() : null);
+
+                // Handle both snake_case (area_px) and camelCase (areaPx) formats for area
+                Integer areaPx = null;
+                if (bbNode.has("area_px") && !bbNode.get("area_px").isNull()) {
+                  areaPx = bbNode.get("area_px").asInt();
+                } else if (bbNode.has("areaPx") && !bbNode.get("areaPx").isNull()) {
+                  areaPx = bbNode.get("areaPx").asInt();
+                }
+                bb.setAreaPx(areaPx);
+
+                region.setBoundingBox(bb);
+              }
+
+              // Parse centroid
+              if (fr.has("centroid") && !fr.get("centroid").isNull()) {
+                FaultRegion.Centroid cent = new FaultRegion.Centroid();
+                JsonNode centNode = fr.get("centroid");
+                cent.setX(centNode.has("x") && !centNode.get("x").isNull() ? centNode.get("x").asInt() : null);
+                cent.setY(centNode.has("y") && !centNode.get("y").isNull() ? centNode.get("y").asInt() : null);
+                region.setCentroid(cent);
+              }
+
+              region.setAspectRatio(fr.has("aspect_ratio") && !fr.get("aspect_ratio").isNull() ? fr.get("aspect_ratio").asDouble() : null);
+              region.setElongated(fr.has("elongated") && !fr.get("elongated").isNull() ? fr.get("elongated").asBoolean() : null);
+              region.setConnectedToWire(fr.has("connected_to_wire") && !fr.get("connected_to_wire").isNull() ? fr.get("connected_to_wire").asBoolean() : null);
+              region.setTag(fr.has("tag") && !fr.get("tag").isNull() ? fr.get("tag").asText() : null);
+              region.setConfidence(fr.has("confidence") && !fr.get("confidence").isNull() ? fr.get("confidence").asDouble() : null);
+              region.setImage(img);
+              faultRegionRepository.save(region);
+            }
+          }
+
+          // Save display metadata
+          if (root.has("display_metadata") && !root.get("display_metadata").isNull()) {
+            DisplayMetadata dm = new DisplayMetadata();
+            JsonNode dmNode = root.get("display_metadata");
+
+            if (dmNode.has("box_colors") && !dmNode.get("box_colors").isNull()) {
+              Map<String, String> boxColors = new HashMap<>();
+              JsonNode bcNode = dmNode.get("box_colors");
+              Iterator<String> keys = bcNode.fieldNames();
+              while (keys.hasNext()) {
+                String key = keys.next();
+                JsonNode val = bcNode.get(key);
+                if (val != null && val.isArray() && val.size() >= 3) {
+                  // Store as comma-separated RGB string
+                  String rgbStr = val.get(0).asInt() + "," + val.get(1).asInt() + "," + val.get(2).asInt();
+                  boxColors.put(key, rgbStr);
+                }
+              }
+              dm.setBoxColors(boxColors);
+            }
+
+            if (root.has("timestamp") && !root.get("timestamp").isNull()) {
+              try {
+                dm.setTimestamp(LocalDateTime.parse(root.get("timestamp").asText()));
+              } catch (Exception ex) {
+                System.err.println("Failed to parse timestamp: " + ex.getMessage());
+              }
+            }
+            dm.setImage(img);
+            displayMetadataRepository.save(dm);
+          }
+
+          // Parse JSON for response
+          anomalyResult = objectMapper.readValue(flaskJson, Object.class);
+
+        } catch (Exception e) {
+          // Log error but don't fail the upload
+          System.err.println("Anomaly detection failed: " + e.getMessage());
+          e.printStackTrace();
+        }
+      }
+    }
+
+    return new ImageUploadResponseDTO(imageDTO, anomalyResult);
   }
 
 
@@ -220,6 +381,64 @@ public class TransformerController {
         .body(res);
   }
 
+  // ---- Anomaly Detection Data Endpoints ----
+
+  // Get fault regions for a specific image
+  @GetMapping("/images/{imageId}/fault-regions")
+  public List<FaultRegionDTO> getFaultRegions(@PathVariable Long imageId) {
+    if (!images.existsById(imageId)) {
+      throw new NotFoundException("Image " + imageId + " not found");
+    }
+    List<FaultRegion> entities = faultRegionRepository.findByImageIdOrderByRegionIdAsc(imageId);
+    return entities.stream().map(FaultRegionDTO::fromEntity).toList();
+  }
+
+  // Get display metadata for a specific image
+  @GetMapping("/images/{imageId}/display-metadata")
+  public ResponseEntity<DisplayMetadataDTO> getDisplayMetadata(@PathVariable Long imageId) {
+    if (!images.existsById(imageId)) {
+      throw new NotFoundException("Image " + imageId + " not found");
+    }
+
+    Optional<DisplayMetadata> metadata = displayMetadataRepository.findByImageId(imageId);
+    return metadata.map(entity -> ResponseEntity.ok(DisplayMetadataDTO.fromEntity(entity)))
+                  .orElse(ResponseEntity.notFound().build());
+  }
+
+  // Get complete anomaly detection results for a specific image
+  @GetMapping("/images/{imageId}/anomaly-results")
+  public ResponseEntity<Map<String, Object>> getAnomalyResults(@PathVariable Long imageId) {
+    TransformerImage img = images.findById(imageId)
+        .orElseThrow(() -> new NotFoundException("Image " + imageId + " not found"));
+
+    if (img.getImageType() != ImageType.MAINTENANCE) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "Anomaly detection results are only available for maintenance images");
+    }
+
+    List<FaultRegion> faultRegionEntities = faultRegionRepository.findByImageIdOrderByRegionIdAsc(imageId);
+    Optional<DisplayMetadata> displayMetadataEntity = displayMetadataRepository.findByImageId(imageId);
+
+
+    if (faultRegionEntities.isEmpty() && displayMetadataEntity.isEmpty()) {
+      return ResponseEntity.notFound().build();
+    }
+
+    Map<String, Object> result = new HashMap<>();
+
+    // Convert entities to DTOs
+    List<FaultRegionDTO> faultRegionDTOs = faultRegionEntities.stream()
+        .map(FaultRegionDTO::fromEntity)
+        .toList();
+
+    result.put("fault_regions", faultRegionDTOs);
+    displayMetadataEntity.ifPresent(dm -> result.put("display_metadata", DisplayMetadataDTO.fromEntity(dm)));
+
+    return ResponseEntity.ok(result);
+  }
+
+  // ---- End Anomaly Detection Endpoints ----
+
   // ---- Inspections ----
   @GetMapping("/{id}/inspections")
   public List<InspectionDTO> listInspections(@PathVariable Long id) {
@@ -245,5 +464,67 @@ public class TransformerController {
 
     inspectionRepository.save(ins);
     return ResponseEntity.status(HttpStatus.CREATED).body(InspectionDTO.fromEntity(ins));
+  }
+
+  // ---- Debug endpoint to check bounding box values ----
+  @GetMapping("/debug/latest-maintenance-bounding-box")
+  public ResponseEntity<Map<String, Object>> getLatestMaintenanceBoundingBox() {
+    // Find the latest maintenance image
+    List<TransformerImage> maintenanceImages = images.findByImageTypeOrderByCreatedAtDesc(ImageType.MAINTENANCE);
+
+    if (maintenanceImages.isEmpty()) {
+      return ResponseEntity.notFound().build();
+    }
+
+    TransformerImage latestImage = maintenanceImages.get(0);
+    Long imageId = latestImage.getId();
+
+    // Get fault regions for this image
+    List<FaultRegion> faultRegions = faultRegionRepository.findByImageIdOrderByRegionIdAsc(imageId);
+
+    Map<String, Object> debugInfo = new HashMap<>();
+    debugInfo.put("imageId", imageId);
+    debugInfo.put("imageName", latestImage.getFilename());
+    debugInfo.put("createdAt", latestImage.getCreatedAt());
+    debugInfo.put("faultRegionCount", faultRegions.size());
+
+    List<Map<String, Object>> boundingBoxDetails = new ArrayList<>();
+
+    for (FaultRegion region : faultRegions) {
+      Map<String, Object> regionInfo = new HashMap<>();
+      regionInfo.put("dbId", region.getDbId());
+      regionInfo.put("regionId", region.getRegionId());
+      regionInfo.put("type", region.getType());
+
+      if (region.getBoundingBox() != null) {
+        Map<String, Object> bbInfo = new HashMap<>();
+        bbInfo.put("x", region.getBoundingBox().getX());
+        bbInfo.put("y", region.getBoundingBox().getY());
+        bbInfo.put("width", region.getBoundingBox().getWidth());
+        bbInfo.put("height", region.getBoundingBox().getHeight());
+        bbInfo.put("areaPx", region.getBoundingBox().getAreaPx());
+        regionInfo.put("boundingBox", bbInfo);
+      } else {
+        regionInfo.put("boundingBox", "NULL");
+      }
+
+      if (region.getCentroid() != null) {
+        Map<String, Object> centroidInfo = new HashMap<>();
+        centroidInfo.put("x", region.getCentroid().getX());
+        centroidInfo.put("y", region.getCentroid().getY());
+        regionInfo.put("centroid", centroidInfo);
+      } else {
+        regionInfo.put("centroid", "NULL");
+      }
+
+      regionInfo.put("confidence", region.getConfidence());
+      regionInfo.put("tag", region.getTag());
+
+      boundingBoxDetails.add(regionInfo);
+    }
+
+    debugInfo.put("faultRegions", boundingBoxDetails);
+
+    return ResponseEntity.ok(debugInfo);
   }
 }

@@ -1,0 +1,70 @@
+{
+  "imageData": {
+    "id": 123,
+    "imageType": "MAINTENANCE",
+    "uploader": "Inspector Name",
+    "envCondition": null,
+    "filename": "maintenance_image.jpg",
+    "createdAt": "2025-10-05T14:30:00",
+    "contentType": "image/jpeg",
+    "sizeBytes": 1048576,
+    "inspectionId": 456
+  },
+  "anomalyDetectionResult": {
+    "fault_regions": [
+      {
+        "id": 1,
+        "type": "Hotspot",
+        "dominantColor": "red",
+        "color_rgb": [255, 0, 0],
+        "bounding_box": {
+          "x": 412,
+          "y": 226,
+          "width": 38,
+          "height": 40,
+          "area_px": 1520
+        },
+        "centroid": {
+          "x": 431,
+          "y": 246
+        },
+        "aspect_ratio": 0.95,
+        "elongated": false,
+        "connected_to_wire": false,
+        "tag": "FAULT",
+        "confidence": 0.95
+      },
+      {
+        "id": 2,
+        "type": "Corrosion",
+        "dominantColor": "brown",
+        "color_rgb": [139, 69, 19],
+        "bounding_box": {
+          "x": 200,
+          "y": 150,
+          "width": 45,
+          "height": 30,
+          "area_px": 1350
+        },
+        "centroid": {
+          "x": 222,
+          "y": 165
+        },
+        "aspect_ratio": 1.5,
+        "elongated": true,
+        "connected_to_wire": true,
+        "tag": "POTENTIAL",
+        "confidence": 0.87
+      }
+    ],
+    "display_metadata": {
+      "box_colors": {
+        "FAULT": [255, 0, 0],
+        "POTENTIAL": [255, 255, 0],
+        "NORMAL": [0, 255, 0]
+      },
+      "timestamp": "2025-10-05T14:30:15"
+    }
+  }
+}
+
