@@ -6,6 +6,7 @@ import com.example.transformer.dto.TransformerImageDTO;
 import com.example.transformer.dto.ImageUploadResponseDTO;
 import com.example.transformer.dto.FaultRegionDTO;
 import com.example.transformer.dto.DisplayMetadataDTO;
+import com.example.transformer.dto.ErrorAnnotationDTO;
 import com.example.transformer.exception.NotFoundException;
 import com.example.transformer.model.ImageType;
 import com.example.transformer.model.Transformer;
@@ -33,7 +34,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @RestController
@@ -50,13 +50,13 @@ public class TransformerController {
   private final ObjectMapper objectMapper;
 
   public TransformerController(TransformerRepository transformers,
-                               TransformerImageRepository images,
-                               FileStorageService storage,
-                               InspectionRepository inspectionRepository,
-                               FaultRegionRepository faultRegionRepository,
-                               DisplayMetadataRepository displayMetadataRepository,
-                               AnomalyDetectionService anomalyDetectionService,
-                               ObjectMapper objectMapper) {
+      TransformerImageRepository images,
+      FileStorageService storage,
+      InspectionRepository inspectionRepository,
+      FaultRegionRepository faultRegionRepository,
+      DisplayMetadataRepository displayMetadataRepository,
+      AnomalyDetectionService anomalyDetectionService,
+      ObjectMapper objectMapper) {
     this.transformers = transformers;
     this.images = images;
     this.storage = storage;
@@ -80,7 +80,9 @@ public class TransformerController {
   }
 
   @GetMapping
-  public List<Transformer> list() { return transformers.findAll(); }
+  public List<Transformer> list() {
+    return transformers.findAll();
+  }
 
   @GetMapping("/{id}")
   public Transformer get(@PathVariable Long id) {
@@ -100,21 +102,22 @@ public class TransformerController {
 
   @DeleteMapping("/{id}")
   public void delete(@PathVariable Long id) {
-    if (!transformers.existsById(id)) throw new NotFoundException("Transformer " + id + " not found");
+    if (!transformers.existsById(id))
+      throw new NotFoundException("Transformer " + id + " not found");
     transformers.deleteById(id);
   }
 
   // ---- Upload image (baseline/maintenance) ----
   // Expect multipart with parts:
-  //   file : binary
-  //   meta : application/json -> ImageUploadDTO { imageType, envCondition?, uploader? }
+  // file : binary
+  // meta : application/json -> ImageUploadDTO { imageType, envCondition?,
+  // uploader? }
   // For MAINTENANCE: pass inspectionId as query param or form field.
   @PostMapping(value = "/{id}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ImageUploadResponseDTO upload(@PathVariable Long id,
-                                      @RequestPart("file") MultipartFile file,
-                                      @RequestPart("meta") @Valid ImageUploadDTO meta,
-                                      @RequestParam(value = "inspectionId", required = false) Long inspectionId
-  ) throws IOException {
+      @RequestPart("file") MultipartFile file,
+      @RequestPart("meta") @Valid ImageUploadDTO meta,
+      @RequestParam(value = "inspectionId", required = false) Long inspectionId) throws IOException {
     Transformer t = get(id);
 
     // Consolidate inspectionId from query OR multipart part
@@ -145,7 +148,8 @@ public class TransformerController {
       }
     }
 
-    // Persist file under /uploads/transformers/{id}/{baseline|maintenance}/TS-filename
+    // Persist file under
+    // /uploads/transformers/{id}/{baseline|maintenance}/TS-filename
     String subfolder = meta.imageType().name().toLowerCase(Locale.ROOT);
     String relativePath = storage.saveTransformerImage(id, subfolder, file);
 
@@ -174,15 +178,15 @@ public class TransformerController {
         img.getCreatedAt(),
         img.getContentType(),
         img.getSizeBytes(),
-        img.getInspection() == null ? null : img.getInspection().getId()
-    );
+        img.getInspection() == null ? null : img.getInspection().getId());
 
     Object anomalyResult = null;
 
     // --- Anomaly detection and DB save ---
     if (meta.imageType() == ImageType.MAINTENANCE) {
       // Find latest baseline image
-      List<TransformerImage> baselineImages = images.findByTransformerIdAndImageTypeOrderByCreatedAtDesc(id, ImageType.BASELINE);
+      List<TransformerImage> baselineImages = images.findByTransformerIdAndImageTypeOrderByCreatedAtDesc(id,
+          ImageType.BASELINE);
 
       if (!baselineImages.isEmpty()) {
         TransformerImage baseline = baselineImages.get(0);
@@ -191,8 +195,7 @@ public class TransformerController {
           // Call Flask API with actual service
           String flaskJson = anomalyDetectionService.detectAnomalies(
               storage.load(baseline.getStoragePath()),
-              storage.load(img.getStoragePath())
-          );
+              storage.load(img.getStoragePath()));
 
           // Parse and save to database
           JsonNode root = objectMapper.readTree(flaskJson);
@@ -207,13 +210,16 @@ public class TransformerController {
               // Safe parsing with null checks
               region.setRegionId(fr.has("id") && !fr.get("id").isNull() ? fr.get("id").asInt() : null);
               region.setType(fr.has("type") && !fr.get("type").isNull() ? fr.get("type").asText() : null);
-              region.setDominantColor(fr.has("dominant_color") && !fr.get("dominant_color").isNull() ? fr.get("dominant_color").asText() : null);
+              region.setDominantColor(
+                  fr.has("dominant_color") && !fr.get("dominant_color").isNull() ? fr.get("dominant_color").asText()
+                      : null);
 
               // Parse color RGB
               List<Integer> rgb = new ArrayList<>();
               if (fr.has("color_rgb") && !fr.get("color_rgb").isNull()) {
                 for (JsonNode c : fr.get("color_rgb")) {
-                  if (!c.isNull()) rgb.add(c.asInt());
+                  if (!c.isNull())
+                    rgb.add(c.asInt());
                 }
               }
               region.setColorRgb(rgb);
@@ -226,8 +232,10 @@ public class TransformerController {
                 bb.setX(bbNode.has("x") && !bbNode.get("x").isNull() ? bbNode.get("x").asInt() : null);
                 bb.setY(bbNode.has("y") && !bbNode.get("y").isNull() ? bbNode.get("y").asInt() : null);
                 bb.setWidth(bbNode.has("width") && !bbNode.get("width").isNull() ? bbNode.get("width").asInt() : null);
-                bb.setHeight(bbNode.has("height") && !bbNode.get("height").isNull() ? bbNode.get("height").asInt() : null);
-                bb.setAreaPx(bbNode.has("areaPx") && !bbNode.get("areaPx").isNull() ? bbNode.get("areaPx").asInt() : null);
+                bb.setHeight(
+                    bbNode.has("height") && !bbNode.get("height").isNull() ? bbNode.get("height").asInt() : null);
+                bb.setAreaPx(
+                    bbNode.has("areaPx") && !bbNode.get("areaPx").isNull() ? bbNode.get("areaPx").asInt() : null);
 
                 region.setBoundingBox(bb);
               } else if (fr.has("bounding_box") && !fr.get("bounding_box").isNull()) {
@@ -237,7 +245,8 @@ public class TransformerController {
                 bb.setX(bbNode.has("x") && !bbNode.get("x").isNull() ? bbNode.get("x").asInt() : null);
                 bb.setY(bbNode.has("y") && !bbNode.get("y").isNull() ? bbNode.get("y").asInt() : null);
                 bb.setWidth(bbNode.has("width") && !bbNode.get("width").isNull() ? bbNode.get("width").asInt() : null);
-                bb.setHeight(bbNode.has("height") && !bbNode.get("height").isNull() ? bbNode.get("height").asInt() : null);
+                bb.setHeight(
+                    bbNode.has("height") && !bbNode.get("height").isNull() ? bbNode.get("height").asInt() : null);
 
                 // Handle both snake_case (area_px) and camelCase (areaPx) formats for area
                 Integer areaPx = null;
@@ -260,11 +269,17 @@ public class TransformerController {
                 region.setCentroid(cent);
               }
 
-              region.setAspectRatio(fr.has("aspect_ratio") && !fr.get("aspect_ratio").isNull() ? fr.get("aspect_ratio").asDouble() : null);
-              region.setElongated(fr.has("elongated") && !fr.get("elongated").isNull() ? fr.get("elongated").asBoolean() : null);
-              region.setConnectedToWire(fr.has("connected_to_wire") && !fr.get("connected_to_wire").isNull() ? fr.get("connected_to_wire").asBoolean() : null);
+              region.setAspectRatio(
+                  fr.has("aspect_ratio") && !fr.get("aspect_ratio").isNull() ? fr.get("aspect_ratio").asDouble()
+                      : null);
+              region.setElongated(
+                  fr.has("elongated") && !fr.get("elongated").isNull() ? fr.get("elongated").asBoolean() : null);
+              region.setConnectedToWire(fr.has("connected_to_wire") && !fr.get("connected_to_wire").isNull()
+                  ? fr.get("connected_to_wire").asBoolean()
+                  : null);
               region.setTag(fr.has("tag") && !fr.get("tag").isNull() ? fr.get("tag").asText() : null);
-              region.setConfidence(fr.has("confidence") && !fr.get("confidence").isNull() ? fr.get("confidence").asDouble() : null);
+              region.setConfidence(
+                  fr.has("confidence") && !fr.get("confidence").isNull() ? fr.get("confidence").asDouble() : null);
               region.setImage(img);
               faultRegionRepository.save(region);
             }
@@ -316,13 +331,12 @@ public class TransformerController {
     return new ImageUploadResponseDTO(imageDTO, anomalyResult);
   }
 
-
   // ---- List images (supports optional filters) ----
   // /{id}/images?type=BASELINE|MAINTENANCE&inspectionId=123
   @GetMapping("/{id}/images")
   public List<TransformerImageDTO> listImages(@PathVariable Long id,
-                                              @RequestParam(value = "type", required = false) ImageType type,
-                                              @RequestParam(value = "inspectionId", required = false) Long inspectionId) {
+      @RequestParam(value = "type", required = false) ImageType type,
+      @RequestParam(value = "inspectionId", required = false) Long inspectionId) {
     if (!transformers.existsById(id)) {
       throw new NotFoundException("Transformer " + id + " not found");
     }
@@ -357,8 +371,7 @@ public class TransformerController {
           img.getCreatedAt(),
           img.getContentType(),
           img.getSizeBytes(),
-          (img.getInspection() == null ? null : img.getInspection().getId())
-      ));
+          (img.getInspection() == null ? null : img.getInspection().getId())));
     }
     return out;
   }
@@ -369,7 +382,8 @@ public class TransformerController {
     TransformerImage img = images.findById(imageId)
         .orElseThrow(() -> new NotFoundException("Image " + imageId + " not found"));
     var res = storage.load(img.getStoragePath());
-    if (!res.exists()) throw new NotFoundException("File missing on disk");
+    if (!res.exists())
+      throw new NotFoundException("File missing on disk");
 
     MediaType mt = Optional.ofNullable(img.getContentType())
         .map(MediaType::parseMediaType)
@@ -402,10 +416,41 @@ public class TransformerController {
 
     Optional<DisplayMetadata> metadata = displayMetadataRepository.findByImageId(imageId);
     return metadata.map(entity -> ResponseEntity.ok(DisplayMetadataDTO.fromEntity(entity)))
-                  .orElse(ResponseEntity.notFound().build());
+        .orElse(ResponseEntity.notFound().build());
   }
 
-  // Get complete anomaly detection results for a specific image
+  // Get all annotated errors for a specific image
+  @GetMapping("/images/{imageId}/errors")
+  public ResponseEntity<Map<String, Object>> getImageErrors(@PathVariable Long imageId) {
+    TransformerImage img = images.findById(imageId)
+        .orElseThrow(() -> new NotFoundException("Image " + imageId + " not found"));
+
+    if (img.getImageType() != ImageType.MAINTENANCE) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "Error annotations are only available for maintenance images");
+    }
+
+    List<FaultRegion> faultRegionEntities = faultRegionRepository.findByImageIdOrderByRegionIdAsc(imageId);
+
+    if (faultRegionEntities.isEmpty()) {
+      // Return empty data array instead of 404
+      Map<String, Object> result = new HashMap<>();
+      result.put("data", new ArrayList<>());
+      return ResponseEntity.ok(result);
+    }
+
+    // Convert entities to error annotation DTOs
+    List<ErrorAnnotationDTO> errorAnnotations = faultRegionEntities.stream()
+        .map(ErrorAnnotationDTO::fromFaultRegion)
+        .toList();
+
+    Map<String, Object> result = new HashMap<>();
+    result.put("data", errorAnnotations);
+
+    return ResponseEntity.ok(result);
+  }
+
+  // Legacy endpoint - kept for backward compatibility
   @GetMapping("/images/{imageId}/anomaly-results")
   public ResponseEntity<Map<String, Object>> getAnomalyResults(@PathVariable Long imageId) {
     TransformerImage img = images.findById(imageId)
@@ -418,7 +463,6 @@ public class TransformerController {
 
     List<FaultRegion> faultRegionEntities = faultRegionRepository.findByImageIdOrderByRegionIdAsc(imageId);
     Optional<DisplayMetadata> displayMetadataEntity = displayMetadataRepository.findByImageId(imageId);
-
 
     if (faultRegionEntities.isEmpty() && displayMetadataEntity.isEmpty()) {
       return ResponseEntity.notFound().build();
@@ -442,14 +486,15 @@ public class TransformerController {
   // ---- Inspections ----
   @GetMapping("/{id}/inspections")
   public List<InspectionDTO> listInspections(@PathVariable Long id) {
-    if (!transformers.existsById(id)) throw new NotFoundException("Transformer " + id + " not found");
+    if (!transformers.existsById(id))
+      throw new NotFoundException("Transformer " + id + " not found");
     return inspectionRepository.findByTransformerIdOrderByCreatedAtDesc(id)
         .stream().map(InspectionDTO::fromEntity).toList();
   }
 
   @PostMapping("/{id}/inspections")
   public ResponseEntity<InspectionDTO> addInspection(@PathVariable Long id,
-                                                     @RequestBody @Valid CreateInspectionDTO body) {
+      @RequestBody @Valid CreateInspectionDTO body) {
     Transformer t = transformers.findById(id)
         .orElseThrow(() -> new NotFoundException("Transformer " + id + " not found"));
 
