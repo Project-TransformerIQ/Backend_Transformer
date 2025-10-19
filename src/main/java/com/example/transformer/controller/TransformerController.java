@@ -1,5 +1,6 @@
 package com.example.transformer.controller;
 
+import com.example.transformer.dto.CreateErrorAnnotationDTO;
 import com.example.transformer.dto.ImageUploadDTO;
 import com.example.transformer.dto.TransformerDTO;
 import com.example.transformer.dto.TransformerImageDTO;
@@ -17,6 +18,7 @@ import com.example.transformer.repository.TransformerImageRepository;
 import com.example.transformer.repository.TransformerRepository;
 import com.example.transformer.service.FileStorageService;
 import com.example.transformer.service.AnomalyDetectionService;
+import com.example.transformer.service.ErrorAnnotationService;
 import jakarta.validation.Valid;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
@@ -47,6 +49,7 @@ public class TransformerController {
   private final FaultRegionRepository faultRegionRepository;
   private final DisplayMetadataRepository displayMetadataRepository;
   private final AnomalyDetectionService anomalyDetectionService;
+  private final ErrorAnnotationService errorAnnotationService;
   private final ObjectMapper objectMapper;
 
   public TransformerController(TransformerRepository transformers,
@@ -56,6 +59,7 @@ public class TransformerController {
       FaultRegionRepository faultRegionRepository,
       DisplayMetadataRepository displayMetadataRepository,
       AnomalyDetectionService anomalyDetectionService,
+      ErrorAnnotationService errorAnnotationService,
       ObjectMapper objectMapper) {
     this.transformers = transformers;
     this.images = images;
@@ -64,6 +68,7 @@ public class TransformerController {
     this.faultRegionRepository = faultRegionRepository;
     this.displayMetadataRepository = displayMetadataRepository;
     this.anomalyDetectionService = anomalyDetectionService;
+    this.errorAnnotationService = errorAnnotationService;
     this.objectMapper = objectMapper;
   }
 
@@ -448,6 +453,28 @@ public class TransformerController {
     result.put("data", errorAnnotations);
 
     return ResponseEntity.ok(result);
+  }
+
+  // Create a new annotated error for a specific image
+  @PostMapping("/images/{imageId}/errors")
+  public ResponseEntity<Map<String, Object>> createImageError(
+      @PathVariable Long imageId,
+      @RequestBody @Valid CreateErrorAnnotationDTO request) {
+
+    // Validate that imageId in path matches imageId in request body
+    if (!imageId.equals(request.imageId())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "Image ID in path does not match image ID in request body");
+    }
+
+    // Create the error annotation using the service
+    ErrorAnnotationDTO createdAnnotation = errorAnnotationService.createErrorAnnotation(request);
+
+    // Wrap response in a "data" field as per API specification
+    Map<String, Object> response = new HashMap<>();
+    response.put("data", createdAnnotation);
+
+    return ResponseEntity.status(HttpStatus.CREATED).body(response);
   }
 
   // Legacy endpoint - kept for backward compatibility

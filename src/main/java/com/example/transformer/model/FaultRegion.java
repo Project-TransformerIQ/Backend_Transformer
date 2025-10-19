@@ -1,6 +1,7 @@
 package com.example.transformer.model;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
@@ -46,6 +47,16 @@ public class FaultRegion {
     @JoinColumn(name = "image_id")
     private TransformerImage image;
 
+    // Manual annotation fields
+    private String comment;
+    private Boolean isManual;
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @Column(name = "created_by")
+    private String createdBy;
+
     // Constructors
     public FaultRegion() {}
 
@@ -88,6 +99,18 @@ public class FaultRegion {
 
     public TransformerImage getImage() { return image; }
     public void setImage(TransformerImage image) { this.image = image; }
+
+    public String getComment() { return comment; }
+    public void setComment(String comment) { this.comment = comment; }
+
+    public Boolean getIsManual() { return isManual; }
+    public void setIsManual(Boolean isManual) { this.isManual = isManual; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
 
     @Embeddable
     public static class BoundingBox {

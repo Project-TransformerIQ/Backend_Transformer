@@ -88,11 +88,16 @@ public record ErrorAnnotationDTO(
         // Determine if it's a point (no width/height)
         boolean isPoint = (w == null || w == 0) && (h == null || h == 0);
 
-        // AI-generated annotations are not manual
-        boolean isManual = false;
+        // Check if manual annotation (default to false for AI-generated)
+        boolean isManual = entity.getIsManual() != null ? entity.getIsManual() : false;
 
-        // Get image creation time as default timestamps
-        LocalDateTime createdAt = entity.getImage() != null ? entity.getImage().getCreatedAt() : LocalDateTime.now();
+        // Use stored createdAt or fallback to image creation time
+        LocalDateTime createdAt = entity.getCreatedAt() != null
+                ? entity.getCreatedAt()
+                : (entity.getImage() != null ? entity.getImage().getCreatedAt() : LocalDateTime.now());
+
+        // Use stored createdBy or default to "ai-system"
+        String createdBy = entity.getCreatedBy() != null ? entity.getCreatedBy() : "ai-system";
 
         return new ErrorAnnotationDTO(
                 id,
@@ -104,16 +109,16 @@ public record ErrorAnnotationDTO(
                 h,
                 status,
                 label,
-                null, // comment - not available from AI detection
+                entity.getComment(), // Use stored comment
                 entity.getConfidence(),
                 entity.getColorRgb(),
                 isManual,
                 isPoint,
                 false, // isDeleted
                 createdAt,
-                "ai-system", // createdBy
-                createdAt, // lastModifiedAt (same as created for AI)
-                "ai-system", // lastModifiedBy
+                createdBy,
+                null, // lastModifiedAt - not implemented yet
+                null, // lastModifiedBy - not implemented yet
                 null // deletedAt
         );
     }
