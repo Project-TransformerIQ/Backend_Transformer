@@ -9,6 +9,8 @@ import com.example.transformer.dto.ImageUploadResponseDTO;
 import com.example.transformer.dto.FaultRegionDTO;
 import com.example.transformer.dto.DisplayMetadataDTO;
 import com.example.transformer.dto.ErrorAnnotationDTO;
+import com.example.transformer.dto.TrainModelRequestDTO;
+import com.example.transformer.dto.TrainModelResponseDTO;
 import com.example.transformer.exception.NotFoundException;
 import com.example.transformer.model.ImageType;
 import com.example.transformer.model.Transformer;
@@ -20,6 +22,7 @@ import com.example.transformer.repository.TransformerRepository;
 import com.example.transformer.service.FileStorageService;
 import com.example.transformer.service.AnomalyDetectionService;
 import com.example.transformer.service.ErrorAnnotationService;
+import com.example.transformer.service.ClassificationTrainingService;
 import jakarta.validation.Valid;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
@@ -51,6 +54,7 @@ public class TransformerController {
   private final DisplayMetadataRepository displayMetadataRepository;
   private final AnomalyDetectionService anomalyDetectionService;
   private final ErrorAnnotationService errorAnnotationService;
+  private final ClassificationTrainingService classificationTrainingService;
   private final ObjectMapper objectMapper;
 
   public TransformerController(TransformerRepository transformers,
@@ -61,6 +65,7 @@ public class TransformerController {
       DisplayMetadataRepository displayMetadataRepository,
       AnomalyDetectionService anomalyDetectionService,
       ErrorAnnotationService errorAnnotationService,
+      ClassificationTrainingService classificationTrainingService,
       ObjectMapper objectMapper) {
     this.transformers = transformers;
     this.images = images;
@@ -70,6 +75,7 @@ public class TransformerController {
     this.displayMetadataRepository = displayMetadataRepository;
     this.anomalyDetectionService = anomalyDetectionService;
     this.errorAnnotationService = errorAnnotationService;
+    this.classificationTrainingService = classificationTrainingService;
     this.objectMapper = objectMapper;
   }
 
@@ -641,5 +647,42 @@ public class TransformerController {
     debugInfo.put("faultRegions", boundingBoxDetails);
 
     return ResponseEntity.ok(debugInfo);
+  }
+
+  // ---- Training endpoint for classification model ----
+  /**
+   * Train the classification model with baseline image, maintenance image,
+   * current configuration, and anomaly detection results.
+   * The classification server will return an updated configuration that will
+   * be saved to the database and set as active.
+   * 
+   * @param transformerId The ID of the transformer
+   * @param request       The training request containing image IDs
+   * @return TrainModelResponseDTO containing training result and updated config
+   *         info
+   */
+  @PostMapping("/{id}/train")
+  public ResponseEntity<TrainModelResponseDTO> trainModel(
+      @PathVariable("id") Long transformerId,
+      @RequestBody @Valid TrainModelRequestDTO request) {
+
+    // Validate that path parameter matches request body
+    if (!transformerId.equals(request.transformerId())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "Transformer ID in path does not match transformer ID in request body");
+    }
+
+    // Validate transformer exists
+    if (!transformers.existsById(transformerId)) {
+      throw new NotFoundException("Transformer " + transformerId + " not found");
+    }
+
+    // Call training service
+    TrainModelResponseDTO response = classificationTrainingService.trainModel(
+        transformerId,
+        request.baselineImageId(),
+        request.maintenanceImageId());
+
+    return ResponseEntity.ok(response);
   }
 }

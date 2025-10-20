@@ -12,7 +12,9 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -86,40 +88,56 @@ public class AnomalyDetectionService {
         try {
             Map<String, Object> configMap = new HashMap<>();
 
-            // SSIM Configuration
-            Map<String, Object> ssimConfig = new HashMap<>();
-            ssimConfig.put("weight", config.getSsimWeight());
-            ssimConfig.put("threshold", config.getSsimThreshold());
-            configMap.put("ssim", ssimConfig);
+            // All 41 parameters matching Python dict structure
+            configMap.put("delta_k_sigma", config.getDeltaKSigma());
+            configMap.put("delta_abs_min", config.getDeltaAbsMin());
+            configMap.put("min_blob_area_px", config.getMinBlobAreaPx());
+            configMap.put("open_iters", config.getOpenIters());
+            configMap.put("dilate_iters", config.getDilateIters());
+            configMap.put("keep_component_min_ratio", config.getKeepComponentMinRatio());
+            configMap.put("fault_red_ratio", config.getFaultRedRatio());
+            configMap.put("fault_red_min_pixels", config.getFaultRedMinPixels());
+            configMap.put("potential_yellow_ratio", config.getPotentialYellowRatio());
+            configMap.put("fullwire_hot_fraction", config.getFullwireHotFraction());
+            configMap.put("elongated_aspect_ratio", config.getElongatedAspectRatio());
+            configMap.put("merge_close_frac", config.getMergeCloseFrac());
+            configMap.put("min_cluster_area_px", config.getMinClusterAreaPx());
+            configMap.put("sidebar_search_frac", config.getSidebarSearchFrac());
+            configMap.put("sidebar_min_width_frac", config.getSidebarMinWidthFrac());
+            configMap.put("sidebar_max_width_frac", config.getSidebarMaxWidthFrac());
+            configMap.put("sidebar_min_valid_frac", config.getSidebarMinValidFrac());
+            configMap.put("sidebar_hue_span_deg", config.getSidebarHueSpanDeg());
+            configMap.put("sidebar_margin_px", config.getSidebarMarginPx());
+            configMap.put("text_bottom_band_frac", config.getTextBottomBandFrac());
+            configMap.put("mask_top_left_overlay", config.getMaskTopLeftOverlay());
 
-            // MSE Configuration
-            Map<String, Object> mseConfig = new HashMap<>();
-            mseConfig.put("weight", config.getMseWeight());
-            mseConfig.put("threshold", config.getMseThreshold());
-            configMap.put("mse", mseConfig);
+            // Parse top_left_box from string "x1,y1,x2,y2" to List<Double>
+            String topLeftBoxStr = config.getTopLeftBox();
+            if (topLeftBoxStr != null && !topLeftBoxStr.isEmpty()) {
+                String[] parts = topLeftBoxStr.split(",");
+                List<Double> topLeftBox = new ArrayList<>();
+                for (String part : parts) {
+                    topLeftBox.add(Double.parseDouble(part.trim()));
+                }
+                configMap.put("top_left_box", topLeftBox);
+            }
 
-            // Histogram Configuration
-            Map<String, Object> histogramConfig = new HashMap<>();
-            histogramConfig.put("weight", config.getHistogramWeight());
-            histogramConfig.put("threshold", config.getHistogramThreshold());
-            configMap.put("histogram", histogramConfig);
-
-            // Combined Threshold
-            configMap.put("combined_threshold", config.getCombinedThreshold());
-
-            // Image Processing Configuration
-            Map<String, Object> imageProcessing = new HashMap<>();
-            imageProcessing.put("resize_width", config.getResizeWidth());
-            imageProcessing.put("resize_height", config.getResizeHeight());
-            imageProcessing.put("blur_kernel_size", config.getBlurKernelSize());
-            configMap.put("image_processing", imageProcessing);
-
-            // Detection Configuration
-            Map<String, Object> detection = new HashMap<>();
-            detection.put("min_contour_area", config.getMinContourArea());
-            detection.put("dilation_iterations", config.getDilationIterations());
-            detection.put("erosion_iterations", config.getErosionIterations());
-            configMap.put("detection", detection);
+            configMap.put("h_bins", config.getHBins());
+            configMap.put("hist_distance_min", config.getHistDistanceMin());
+            configMap.put("red_bg_ratio_min_increase", config.getRedBgRatioMinIncrease());
+            configMap.put("red_bg_min_abs", config.getRedBgMinAbs());
+            configMap.put("roi_s_min", config.getRoiSMin());
+            configMap.put("roi_v_min", config.getRoiVMin());
+            configMap.put("blue_h_lo", config.getBlueHLo());
+            configMap.put("blue_h_hi", config.getBlueHHi());
+            configMap.put("blue_s_min", config.getBlueSMin());
+            configMap.put("blue_v_min", config.getBlueVMin());
+            configMap.put("black_v_hi", config.getBlackVHi());
+            configMap.put("white_bg_S_max", config.getWhiteBgSMax());
+            configMap.put("white_bg_V_min", config.getWhiteBgVMin());
+            configMap.put("white_bg_exclude_near_warm_px", config.getWhiteBgExcludeNearWarmPx());
+            configMap.put("white_bg_column_frac", config.getWhiteBgColumnFrac());
+            configMap.put("white_bg_row_frac", config.getWhiteBgRowFrac());
 
             return objectMapper.writeValueAsString(configMap);
         } catch (Exception e) {

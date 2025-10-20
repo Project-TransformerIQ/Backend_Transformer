@@ -17,3 +17,13 @@ spring:
 
 server:
   port: 8080
+
+app:
+  storage:
+    root: uploads
+
+# Anomaly Detection and Classification Flask API URL
+anomaly:
+  detection:
+    api:
+      url: http://localhost:5000
