@@ -1,6 +1,7 @@
 package com.example.transformer.controller;
 
 import com.example.transformer.dto.CreateErrorAnnotationDTO;
+import com.example.transformer.dto.UpdateErrorAnnotationDTO;
 import com.example.transformer.dto.ImageUploadDTO;
 import com.example.transformer.dto.TransformerDTO;
 import com.example.transformer.dto.TransformerImageDTO;
@@ -426,7 +427,9 @@ public class TransformerController {
 
   // Get all annotated errors for a specific image
   @GetMapping("/images/{imageId}/errors")
-  public ResponseEntity<Map<String, Object>> getImageErrors(@PathVariable Long imageId) {
+  public ResponseEntity<Map<String, Object>> getImageErrors(
+      @PathVariable Long imageId,
+      @RequestParam(value = "includeDeleted", defaultValue = "true") boolean includeDeleted) {
     TransformerImage img = images.findById(imageId)
         .orElseThrow(() -> new NotFoundException("Image " + imageId + " not found"));
 
@@ -444,8 +447,9 @@ public class TransformerController {
       return ResponseEntity.ok(result);
     }
 
-    // Convert entities to error annotation DTOs
+    // Filter out deleted errors unless includeDeleted is true
     List<ErrorAnnotationDTO> errorAnnotations = faultRegionEntities.stream()
+        .filter(region -> includeDeleted || region.getIsDeleted() == null || !region.getIsDeleted())
         .map(ErrorAnnotationDTO::fromFaultRegion)
         .toList();
 
@@ -475,6 +479,45 @@ public class TransformerController {
     response.put("data", createdAnnotation);
 
     return ResponseEntity.status(HttpStatus.CREATED).body(response);
+  }
+
+  // Update an existing error annotation for a specific image
+  @PutMapping("/images/{imageId}/errors/{errorId}")
+  public ResponseEntity<Map<String, Object>> updateImageError(
+      @PathVariable Long imageId,
+      @PathVariable String errorId,
+      @RequestBody @Valid UpdateErrorAnnotationDTO request) {
+
+    // Validate that errorId in path matches errorId in request body
+    if (!errorId.equals(request.id())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "Error ID in path does not match error ID in request body");
+    }
+
+    // Update the error annotation using the service
+    ErrorAnnotationDTO updatedAnnotation = errorAnnotationService.updateErrorAnnotation(imageId, errorId, request);
+
+    // Wrap response in a "data" field as per API specification
+    Map<String, Object> response = new HashMap<>();
+    response.put("data", updatedAnnotation);
+
+    return ResponseEntity.ok(response);
+  }
+
+  // Soft-delete an error annotation (mark as deleted, retain in database)
+  @DeleteMapping("/images/{imageId}/errors/{errorId}")
+  public ResponseEntity<Map<String, Object>> deleteImageError(
+      @PathVariable Long imageId,
+      @PathVariable String errorId) {
+
+    // Delete the error annotation using the service (soft delete)
+    ErrorAnnotationDTO deletedAnnotation = errorAnnotationService.deleteErrorAnnotation(imageId, errorId);
+
+    // Wrap response in a "data" field as per API specification
+    Map<String, Object> response = new HashMap<>();
+    response.put("data", deletedAnnotation);
+
+    return ResponseEntity.ok(response);
   }
 
   // Legacy endpoint - kept for backward compatibility

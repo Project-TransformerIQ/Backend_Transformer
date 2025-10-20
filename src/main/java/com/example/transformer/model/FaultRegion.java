@@ -22,18 +22,18 @@ public class FaultRegion {
 
     @Embedded
     @AttributeOverrides({
-        @AttributeOverride(name = "x", column = @Column(name = "bbox_x")),
-        @AttributeOverride(name = "y", column = @Column(name = "bbox_y")),
-        @AttributeOverride(name = "width", column = @Column(name = "bbox_width")),
-        @AttributeOverride(name = "height", column = @Column(name = "bbox_height")),
-        @AttributeOverride(name = "areaPx", column = @Column(name = "bbox_area_px"))
+            @AttributeOverride(name = "x", column = @Column(name = "bbox_x")),
+            @AttributeOverride(name = "y", column = @Column(name = "bbox_y")),
+            @AttributeOverride(name = "width", column = @Column(name = "bbox_width")),
+            @AttributeOverride(name = "height", column = @Column(name = "bbox_height")),
+            @AttributeOverride(name = "areaPx", column = @Column(name = "bbox_area_px"))
     })
     private BoundingBox boundingBox;
 
     @Embedded
     @AttributeOverrides({
-        @AttributeOverride(name = "x", column = @Column(name = "centroid_x")),
-        @AttributeOverride(name = "y", column = @Column(name = "centroid_y"))
+            @AttributeOverride(name = "x", column = @Column(name = "centroid_x")),
+            @AttributeOverride(name = "y", column = @Column(name = "centroid_y"))
     })
     private Centroid centroid;
 
@@ -57,60 +57,190 @@ public class FaultRegion {
     @Column(name = "created_by")
     private String createdBy;
 
+    @Column(name = "last_modified_at")
+    private LocalDateTime lastModifiedAt;
+
+    @Column(name = "last_modified_by")
+    private String lastModifiedBy;
+
+    @Column(name = "is_deleted")
+    private Boolean isDeleted;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     // Constructors
-    public FaultRegion() {}
+    public FaultRegion() {
+    }
 
     // Getters and Setters
-    public Long getDbId() { return dbId; }
-    public void setDbId(Long dbId) { this.dbId = dbId; }
+    public Long getDbId() {
+        return dbId;
+    }
 
-    public Integer getRegionId() { return regionId; }
-    public void setRegionId(Integer regionId) { this.regionId = regionId; }
+    public void setDbId(Long dbId) {
+        this.dbId = dbId;
+    }
 
-    public String getType() { return type; }
-    public void setType(String type) { this.type = type; }
+    public Integer getRegionId() {
+        return regionId;
+    }
 
-    public String getDominantColor() { return dominantColor; }
-    public void setDominantColor(String dominantColor) { this.dominantColor = dominantColor; }
+    public void setRegionId(Integer regionId) {
+        this.regionId = regionId;
+    }
 
-    public List<Integer> getColorRgb() { return colorRgb; }
-    public void setColorRgb(List<Integer> colorRgb) { this.colorRgb = colorRgb; }
+    public String getType() {
+        return type;
+    }
 
-    public BoundingBox getBoundingBox() { return boundingBox; }
-    public void setBoundingBox(BoundingBox boundingBox) { this.boundingBox = boundingBox; }
+    public void setType(String type) {
+        this.type = type;
+    }
 
-    public Centroid getCentroid() { return centroid; }
-    public void setCentroid(Centroid centroid) { this.centroid = centroid; }
+    public String getDominantColor() {
+        return dominantColor;
+    }
 
-    public Double getAspectRatio() { return aspectRatio; }
-    public void setAspectRatio(Double aspectRatio) { this.aspectRatio = aspectRatio; }
+    public void setDominantColor(String dominantColor) {
+        this.dominantColor = dominantColor;
+    }
 
-    public Boolean getElongated() { return elongated; }
-    public void setElongated(Boolean elongated) { this.elongated = elongated; }
+    public List<Integer> getColorRgb() {
+        return colorRgb;
+    }
 
-    public Boolean getConnectedToWire() { return connectedToWire; }
-    public void setConnectedToWire(Boolean connectedToWire) { this.connectedToWire = connectedToWire; }
+    public void setColorRgb(List<Integer> colorRgb) {
+        this.colorRgb = colorRgb;
+    }
 
-    public String getTag() { return tag; }
-    public void setTag(String tag) { this.tag = tag; }
+    public BoundingBox getBoundingBox() {
+        return boundingBox;
+    }
 
-    public Double getConfidence() { return confidence; }
-    public void setConfidence(Double confidence) { this.confidence = confidence; }
+    public void setBoundingBox(BoundingBox boundingBox) {
+        this.boundingBox = boundingBox;
+    }
 
-    public TransformerImage getImage() { return image; }
-    public void setImage(TransformerImage image) { this.image = image; }
+    public Centroid getCentroid() {
+        return centroid;
+    }
 
-    public String getComment() { return comment; }
-    public void setComment(String comment) { this.comment = comment; }
+    public void setCentroid(Centroid centroid) {
+        this.centroid = centroid;
+    }
 
-    public Boolean getIsManual() { return isManual; }
-    public void setIsManual(Boolean isManual) { this.isManual = isManual; }
+    public Double getAspectRatio() {
+        return aspectRatio;
+    }
 
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public void setAspectRatio(Double aspectRatio) {
+        this.aspectRatio = aspectRatio;
+    }
 
-    public String getCreatedBy() { return createdBy; }
-    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+    public Boolean getElongated() {
+        return elongated;
+    }
+
+    public void setElongated(Boolean elongated) {
+        this.elongated = elongated;
+    }
+
+    public Boolean getConnectedToWire() {
+        return connectedToWire;
+    }
+
+    public void setConnectedToWire(Boolean connectedToWire) {
+        this.connectedToWire = connectedToWire;
+    }
+
+    public String getTag() {
+        return tag;
+    }
+
+    public void setTag(String tag) {
+        this.tag = tag;
+    }
+
+    public Double getConfidence() {
+        return confidence;
+    }
+
+    public void setConfidence(Double confidence) {
+        this.confidence = confidence;
+    }
+
+    public TransformerImage getImage() {
+        return image;
+    }
+
+    public void setImage(TransformerImage image) {
+        this.image = image;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
+    }
+
+    public Boolean getIsManual() {
+        return isManual;
+    }
+
+    public void setIsManual(Boolean isManual) {
+        this.isManual = isManual;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public LocalDateTime getLastModifiedAt() {
+        return lastModifiedAt;
+    }
+
+    public void setLastModifiedAt(LocalDateTime lastModifiedAt) {
+        this.lastModifiedAt = lastModifiedAt;
+    }
+
+    public String getLastModifiedBy() {
+        return lastModifiedBy;
+    }
+
+    public void setLastModifiedBy(String lastModifiedBy) {
+        this.lastModifiedBy = lastModifiedBy;
+    }
+
+    public Boolean getIsDeleted() {
+        return isDeleted;
+    }
+
+    public void setIsDeleted(Boolean isDeleted) {
+        this.isDeleted = isDeleted;
+    }
+
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
+    }
 
     @Embeddable
     public static class BoundingBox {
@@ -120,22 +250,48 @@ public class FaultRegion {
         private Integer height;
         private Integer areaPx;
 
-        public BoundingBox() {}
+        public BoundingBox() {
+        }
 
-        public Integer getX() { return x; }
-        public void setX(Integer x) { this.x = x; }
+        public Integer getX() {
+            return x;
+        }
 
-        public Integer getY() { return y; }
-        public void setY(Integer y) { this.y = y; }
+        public void setX(Integer x) {
+            this.x = x;
+        }
 
-        public Integer getWidth() { return width; }
-        public void setWidth(Integer width) { this.width = width; }
+        public Integer getY() {
+            return y;
+        }
 
-        public Integer getHeight() { return height; }
-        public void setHeight(Integer height) { this.height = height; }
+        public void setY(Integer y) {
+            this.y = y;
+        }
 
-        public Integer getAreaPx() { return areaPx; }
-        public void setAreaPx(Integer areaPx) { this.areaPx = areaPx; }
+        public Integer getWidth() {
+            return width;
+        }
+
+        public void setWidth(Integer width) {
+            this.width = width;
+        }
+
+        public Integer getHeight() {
+            return height;
+        }
+
+        public void setHeight(Integer height) {
+            this.height = height;
+        }
+
+        public Integer getAreaPx() {
+            return areaPx;
+        }
+
+        public void setAreaPx(Integer areaPx) {
+            this.areaPx = areaPx;
+        }
     }
 
     @Embeddable
@@ -143,12 +299,23 @@ public class FaultRegion {
         private Integer x;
         private Integer y;
 
-        public Centroid() {}
+        public Centroid() {
+        }
 
-        public Integer getX() { return x; }
-        public void setX(Integer x) { this.x = x; }
+        public Integer getX() {
+            return x;
+        }
 
-        public Integer getY() { return y; }
-        public void setY(Integer y) { this.y = y; }
+        public void setX(Integer x) {
+            this.x = x;
+        }
+
+        public Integer getY() {
+            return y;
+        }
+
+        public void setY(Integer y) {
+            this.y = y;
+        }
     }
 }

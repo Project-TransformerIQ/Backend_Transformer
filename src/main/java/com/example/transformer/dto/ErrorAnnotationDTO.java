@@ -114,13 +114,12 @@ public record ErrorAnnotationDTO(
                 entity.getColorRgb(),
                 isManual,
                 isPoint,
-                false, // isDeleted
+                entity.getIsDeleted() != null ? entity.getIsDeleted() : false,
                 createdAt,
                 createdBy,
-                null, // lastModifiedAt - not implemented yet
-                null, // lastModifiedBy - not implemented yet
-                null // deletedAt
-        );
+                entity.getLastModifiedAt(),
+                entity.getLastModifiedBy(),
+                entity.getDeletedAt());
     }
 
     private static String determineStatus(String tag, Double confidence) {
