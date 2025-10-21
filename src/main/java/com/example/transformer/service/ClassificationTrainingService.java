@@ -4,9 +4,11 @@ import com.example.transformer.dto.TrainModelResponseDTO;
 import com.example.transformer.model.AnomalyDetectionConfig;
 import com.example.transformer.model.TransformerImage;
 import com.example.transformer.model.FaultRegion;
+import com.example.transformer.model.OriginalAnomalyResult;
 import com.example.transformer.repository.AnomalyDetectionConfigRepository;
 import com.example.transformer.repository.TransformerImageRepository;
 import com.example.transformer.repository.FaultRegionRepository;
+import com.example.transformer.repository.OriginalAnomalyResultRepository;
 import com.example.transformer.exception.NotFoundException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,6 +39,7 @@ public class ClassificationTrainingService {
     private final AnomalyDetectionConfigRepository configRepository;
     private final TransformerImageRepository imageRepository;
     private final FaultRegionRepository faultRegionRepository;
+    private final OriginalAnomalyResultRepository originalAnomalyResultRepository;
     private final FileStorageService fileStorageService;
     private final ObjectMapper objectMapper;
 
@@ -45,12 +48,14 @@ public class ClassificationTrainingService {
             AnomalyDetectionConfigRepository configRepository,
             TransformerImageRepository imageRepository,
             FaultRegionRepository faultRegionRepository,
+            OriginalAnomalyResultRepository originalAnomalyResultRepository,
             FileStorageService fileStorageService,
             ObjectMapper objectMapper) {
         this.restTemplate = restTemplate;
         this.configRepository = configRepository;
         this.imageRepository = imageRepository;
         this.faultRegionRepository = faultRegionRepository;
+        this.originalAnomalyResultRepository = originalAnomalyResultRepository;
         this.fileStorageService = fileStorageService;
         this.objectMapper = objectMapper;
     }
@@ -96,6 +101,16 @@ public class ClassificationTrainingService {
                     "No anomaly detection results found for maintenance image " + maintenanceImageId);
         }
 
+        // Filter out deleted regions - don't send deleted results to classification server
+        List<FaultRegion> activeFaultRegions = faultRegions.stream()
+                .filter(region -> region.getIsDeleted() == null || !region.getIsDeleted())
+                .toList();
+
+        if (activeFaultRegions.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "No active (non-deleted) anomaly detection results found for maintenance image " + maintenanceImageId);
+        }
+
         // Prepare request to classification server
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
@@ -121,7 +136,7 @@ public class ClassificationTrainingService {
         body.add("config", configResource);
 
         // Add anomaly detection results as JSON
-        String anomalyResultsJson = createAnomalyResultsJson(faultRegions);
+        String anomalyResultsJson = createAnomalyResultsJson(activeFaultRegions);
         ByteArrayResource anomalyResource = new ByteArrayResource(anomalyResultsJson.getBytes()) {
             @Override
             public String getFilename() {
@@ -129,6 +144,21 @@ public class ClassificationTrainingService {
             }
         };
         body.add("anomaly_results", anomalyResource);
+
+        // Add original anomaly results from classification server as JSON
+        OriginalAnomalyResult originalResult = originalAnomalyResultRepository.findByImageId(maintenanceImageId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "No original anomaly detection results found for maintenance image " + maintenanceImageId +
+                        ". This data is required for training."));
+
+        // Use the original JSON directly from the database
+        ByteArrayResource originalResource = new ByteArrayResource(originalResult.getAnomalyJson().getBytes()) {
+            @Override
+            public String getFilename() {
+                return "original_anomaly_results.json";
+            }
+        };
+        body.add("original_anomaly_results", originalResource);
 
         HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
@@ -165,9 +195,13 @@ public class ClassificationTrainingService {
             if (root.has("updated_config")) {
                 JsonNode configNode = root.get("updated_config");
 
-                // Create new configuration or update existing one
-                String newConfigName = currentConfig.getConfigName() + "_trained_" +
-                        LocalDateTime.now().toString().replace(":", "-").substring(0, 19);
+                // Create new configuration with a shorter name to avoid exceeding 100 char limit
+                // Format: "trained_YYYY-MM-DD_HH-MM-SS" (max ~27 characters)
+                String timestamp = LocalDateTime.now().toString()
+                        .replace(":", "-")
+                        .replace("T", "_")
+                        .substring(0, 19); // YYYY-MM-DD_HH-MM-SS
+                String newConfigName = "trained_" + timestamp;
 
                 // Deactivate current config
                 currentConfig.setIsActive(false);
@@ -433,3 +467,4 @@ public class ClassificationTrainingService {
         }
     }
 }
+

@@ -17,6 +17,7 @@ import com.example.transformer.model.Transformer;
 import com.example.transformer.model.TransformerImage;
 import com.example.transformer.model.FaultRegion;
 import com.example.transformer.model.DisplayMetadata;
+import com.example.transformer.model.OriginalAnomalyResult;
 import com.example.transformer.repository.TransformerImageRepository;
 import com.example.transformer.repository.TransformerRepository;
 import com.example.transformer.service.FileStorageService;
@@ -35,6 +36,7 @@ import com.example.transformer.model.InspectionStatus;
 import com.example.transformer.repository.InspectionRepository;
 import com.example.transformer.repository.FaultRegionRepository;
 import com.example.transformer.repository.DisplayMetadataRepository;
+import com.example.transformer.repository.OriginalAnomalyResultRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -55,6 +57,7 @@ public class TransformerController {
   private final AnomalyDetectionService anomalyDetectionService;
   private final ErrorAnnotationService errorAnnotationService;
   private final ClassificationTrainingService classificationTrainingService;
+  private final OriginalAnomalyResultRepository originalAnomalyResultRepository;
   private final ObjectMapper objectMapper;
 
   public TransformerController(TransformerRepository transformers,
@@ -66,6 +69,7 @@ public class TransformerController {
       AnomalyDetectionService anomalyDetectionService,
       ErrorAnnotationService errorAnnotationService,
       ClassificationTrainingService classificationTrainingService,
+      OriginalAnomalyResultRepository originalAnomalyResultRepository,
       ObjectMapper objectMapper) {
     this.transformers = transformers;
     this.images = images;
@@ -76,6 +80,7 @@ public class TransformerController {
     this.anomalyDetectionService = anomalyDetectionService;
     this.errorAnnotationService = errorAnnotationService;
     this.classificationTrainingService = classificationTrainingService;
+    this.originalAnomalyResultRepository = originalAnomalyResultRepository;
     this.objectMapper = objectMapper;
   }
 
@@ -332,6 +337,13 @@ public class TransformerController {
           // Parse JSON for response
           anomalyResult = objectMapper.readValue(flaskJson, Object.class);
 
+          // Save original anomaly results for future comparison
+          OriginalAnomalyResult originalResult = OriginalAnomalyResult.builder()
+              .image(img)
+              .anomalyJson(flaskJson)
+              .build();
+          originalAnomalyResultRepository.save(originalResult);
+
         } catch (Exception e) {
           // Log error but don't fail the upload
           System.err.println("Anomaly detection failed: " + e.getMessage());
@@ -558,6 +570,106 @@ public class TransformerController {
   }
 
   // ---- End Anomaly Detection Endpoints ----
+
+  // ---- Download Combined Anomaly Results ----
+  /**
+   * Download both original anomaly results from classification server and
+   * current edited anomaly results in a single JSON file.
+   * Returns a comparison showing what was originally detected vs current state.
+   *
+   * @param imageId The ID of the maintenance image
+   * @return JSON file containing original and edited anomaly results
+   */
+  @GetMapping("/images/{imageId}/anomaly-comparison")
+  public ResponseEntity<Map<String, Object>> downloadAnomalyComparison(@PathVariable Long imageId) {
+    TransformerImage img = images.findById(imageId)
+        .orElseThrow(() -> new NotFoundException("Image " + imageId + " not found"));
+
+    if (img.getImageType() != ImageType.MAINTENANCE) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+          "Anomaly comparison is only available for maintenance images");
+    }
+
+    // Get original anomaly results from classification server
+    Optional<OriginalAnomalyResult> originalResultOpt = originalAnomalyResultRepository.findByImageId(imageId);
+
+    // Get current edited anomaly results
+    List<FaultRegion> currentFaultRegions = faultRegionRepository.findByImageIdOrderByRegionIdAsc(imageId);
+    Optional<DisplayMetadata> currentDisplayMetadata = displayMetadataRepository.findByImageId(imageId);
+
+    // Build response
+    Map<String, Object> response = new HashMap<>();
+
+    // Add image information
+    Map<String, Object> imageInfo = new HashMap<>();
+    imageInfo.put("imageId", img.getId());
+    imageInfo.put("filename", img.getFilename());
+    imageInfo.put("uploadedAt", img.getCreatedAt());
+    imageInfo.put("uploader", img.getUploader());
+    if (img.getInspection() != null) {
+      imageInfo.put("inspectionId", img.getInspection().getId());
+      imageInfo.put("inspectionTitle", img.getInspection().getTitle());
+    }
+    response.put("imageInfo", imageInfo);
+
+    // Add original results from classification server
+    if (originalResultOpt.isPresent()) {
+      try {
+        Object originalJson = objectMapper.readValue(originalResultOpt.get().getAnomalyJson(), Object.class);
+        Map<String, Object> originalData = new HashMap<>();
+        originalData.put("receivedAt", originalResultOpt.get().getCreatedAt());
+        originalData.put("data", originalJson);
+        response.put("originalResults", originalData);
+      } catch (Exception e) {
+        System.err.println("Failed to parse original anomaly JSON: " + e.getMessage());
+        response.put("originalResults", null);
+      }
+    } else {
+      response.put("originalResults", null);
+    }
+
+    // Add current edited results
+    Map<String, Object> currentResults = new HashMap<>();
+
+    List<FaultRegionDTO> currentFaultRegionDTOs = currentFaultRegions.stream()
+        .map(FaultRegionDTO::fromEntity)
+        .toList();
+    currentResults.put("fault_regions", currentFaultRegionDTOs);
+
+    if (currentDisplayMetadata.isPresent()) {
+      currentResults.put("display_metadata", DisplayMetadataDTO.fromEntity(currentDisplayMetadata.get()));
+    }
+
+    // Add metadata about edits
+    long manuallyAddedCount = currentFaultRegions.stream()
+        .filter(fr -> fr.getIsManual() != null && fr.getIsManual())
+        .count();
+    long deletedCount = currentFaultRegions.stream()
+        .filter(fr -> fr.getIsDeleted() != null && fr.getIsDeleted())
+        .count();
+    long modifiedCount = currentFaultRegions.stream()
+        .filter(fr -> fr.getLastModifiedAt() != null)
+        .count();
+
+    Map<String, Object> editSummary = new HashMap<>();
+    editSummary.put("totalRegions", currentFaultRegions.size());
+    editSummary.put("manuallyAdded", manuallyAddedCount);
+    editSummary.put("deleted", deletedCount);
+    editSummary.put("modified", modifiedCount);
+    currentResults.put("editSummary", editSummary);
+
+    response.put("currentResults", currentResults);
+
+    // Add generation timestamp
+    response.put("generatedAt", LocalDateTime.now());
+
+    // Return as downloadable JSON
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION,
+            "attachment; filename=\"anomaly-comparison-image-" + imageId + ".json\"")
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(response);
+  }
 
   // ---- Inspections ----
   @GetMapping("/{id}/inspections")
