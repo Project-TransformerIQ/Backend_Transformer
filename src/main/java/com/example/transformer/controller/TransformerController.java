@@ -709,6 +709,59 @@ public class TransformerController {
     inspectionRepository.save(ins);
     return ResponseEntity.status(HttpStatus.CREATED).body(InspectionDTO.fromEntity(ins));
   }
+  // ---- Delete a single inspection ----
+  @DeleteMapping("/{transformerId}/inspections/{inspectionId}")
+  public ResponseEntity<Void> deleteInspection(
+          @PathVariable Long transformerId,
+          @PathVariable Long inspectionId) {
+
+      // 1. Check transformer exists
+      Transformer t = transformers.findById(transformerId)
+          .orElseThrow(() -> new NotFoundException("Transformer " + transformerId + " not found"));
+
+      // 2. Load inspection
+      Inspection ins = inspectionRepository.findById(inspectionId)
+          .orElseThrow(() -> new NotFoundException("Inspection " + inspectionId + " not found"));
+
+      // 3. Ensure it belongs to this transformer
+      if (ins.getTransformer() == null ||
+          !Objects.equals(ins.getTransformer().getId(), t.getId())) {
+          throw new ResponseStatusException(
+              HttpStatus.BAD_REQUEST,
+              "Inspection does not belong to this transformer"
+          );
+      }
+
+      // 4. (Optional but IMPORTANT) Clean up related data if needed:
+      //    - maintenance records
+      //    - maintenance images
+      //    - fault regions / display metadata attached to those images
+
+      // Example: delete maintenance records for this inspection
+      maintenanceRecordRepository.deleteByInspectionId(inspectionId);
+
+      // Example: delete images of this inspection (if you want hard delete)
+      List<TransformerImage> imgs = images.findByInspectionId(inspectionId);
+       for (TransformerImage img : imgs) {
+
+            // 1) Delete anomaly results FIRST
+            originalAnomalyResultRepository.deleteByImageId(img.getId());
+
+            // 2) Delete fault regions
+            faultRegionRepository.deleteByImageId(img.getId());
+
+            // 3) Delete display metadata
+            displayMetadataRepository.deleteByImageId(img.getId());
+
+            // 4) Finally delete the image
+            images.delete(img);
+        }
+
+      // 5. Finally delete inspection
+      inspectionRepository.delete(ins);
+
+      return ResponseEntity.noContent().build();
+  }
 
   // ---- Debug endpoint to check bounding box values ----
   @GetMapping("/debug/latest-maintenance-bounding-box")
@@ -861,16 +914,33 @@ public class TransformerController {
               inspection = maintenanceImage.getInspection();
           }
       } else {
-          // Fallback: find latest MAINTENANCE image for this transformer
-          List<TransformerImage> allMaint = images.findByTransformerIdAndImageTypeOrderByCreatedAtDesc(
-                  id, ImageType.MAINTENANCE);
-          if (!allMaint.isEmpty()) {
-              maintenanceImage = allMaint.get(0);
-              if (inspection == null) {
-                  inspection = maintenanceImage.getInspection();
-              }
-          }
+        List<TransformerImage> allMaint;
+
+        if (inspection != null) {
+            // Fetch ONLY maintenance images for this inspection
+            allMaint = images.findByTransformerIdAndImageTypeAndInspection_IdOrderByCreatedAtDesc(
+                    id,
+                    ImageType.MAINTENANCE,
+                    inspection.getId()
+            );
+        } else {
+            // Fallback: no inspection given, fetch all
+            allMaint = images.findByTransformerIdAndImageTypeOrderByCreatedAtDesc(
+                    id,
+                    ImageType.MAINTENANCE
+            );
+        }
+
+        if (!allMaint.isEmpty()) {
+            maintenanceImage = allMaint.get(0);
+
+            // If inspection wasn't resolved earlier, pick from image
+            if (inspection == null) {
+                inspection = maintenanceImage.getInspection();
+            }
+        }
       }
+
 
       if (maintenanceImage == null) {
           throw new ResponseStatusException(HttpStatus.BAD_REQUEST,

@@ -2,14 +2,21 @@ package com.example.transformer.repository;
 
 import com.example.transformer.model.FaultRegion;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 
 public interface FaultRegionRepository extends JpaRepository<FaultRegion, Long> {
-    @Query("SELECT fr FROM FaultRegion fr WHERE fr.image.id = :imageId")
-    List<FaultRegion> findByImageId(@Param("imageId") Long imageId);
 
-    @Query("SELECT fr FROM FaultRegion fr WHERE fr.image.id = :imageId ORDER BY fr.regionId ASC")
-    List<FaultRegion> findByImageIdOrderByRegionIdAsc(@Param("imageId") Long imageId);
+    // Used commonly throughout backend
+    List<FaultRegion> findByImageIdOrderByRegionIdAsc(Long imageId);
+
+    // Required by ErrorAnnotationService
+    List<FaultRegion> findByImageId(Long imageId);
+
+    // Required when deleting an inspection
+    @Transactional
+    @Modifying
+    void deleteByImageId(Long imageId);
 }

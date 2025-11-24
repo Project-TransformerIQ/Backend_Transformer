@@ -9,4 +9,11 @@ public interface TransformerImageRepository extends JpaRepository<TransformerIma
   List<TransformerImage> findByTransformerIdOrderByCreatedAtDesc(Long transformerId);
   List<TransformerImage> findByTransformerIdAndImageTypeOrderByCreatedAtDesc(Long transformerId, ImageType imageType);
   List<TransformerImage> findByImageTypeOrderByCreatedAtDesc(ImageType imageType);
+  List<TransformerImage> findByTransformerIdAndImageTypeAndInspection_IdOrderByCreatedAtDesc(
+        Long transformerId,
+        ImageType imageType,
+        Long inspectionId
+  );
+  List<TransformerImage> findByInspectionId(Long inspectionId);
+
 }
