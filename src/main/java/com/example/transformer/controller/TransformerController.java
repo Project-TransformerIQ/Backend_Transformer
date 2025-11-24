@@ -1,5 +1,13 @@
 package com.example.transformer.controller;
 
+import com.example.transformer.model.MaintenanceRecord;
+import com.example.transformer.model.MaintenanceStatus;
+import com.example.transformer.repository.MaintenanceRecordRepository;
+import com.example.transformer.dto.MaintenanceRecordDTO;
+import com.example.transformer.dto.CreateMaintenanceRecordDTO;
+import com.example.transformer.dto.UpdateMaintenanceRecordDTO;
+import com.example.transformer.dto.MaintenanceRecordFormDTO;
+
 import com.example.transformer.dto.CreateErrorAnnotationDTO;
 import com.example.transformer.dto.UpdateErrorAnnotationDTO;
 import com.example.transformer.dto.ImageUploadDTO;
@@ -59,6 +67,7 @@ public class TransformerController {
   private final ClassificationTrainingService classificationTrainingService;
   private final OriginalAnomalyResultRepository originalAnomalyResultRepository;
   private final ObjectMapper objectMapper;
+  private final MaintenanceRecordRepository maintenanceRecordRepository;
 
   public TransformerController(TransformerRepository transformers,
       TransformerImageRepository images,
@@ -70,7 +79,8 @@ public class TransformerController {
       ErrorAnnotationService errorAnnotationService,
       ClassificationTrainingService classificationTrainingService,
       OriginalAnomalyResultRepository originalAnomalyResultRepository,
-      ObjectMapper objectMapper) {
+      ObjectMapper objectMapper,
+      MaintenanceRecordRepository maintenanceRecordRepository) {
     this.transformers = transformers;
     this.images = images;
     this.storage = storage;
@@ -82,6 +92,7 @@ public class TransformerController {
     this.classificationTrainingService = classificationTrainingService;
     this.originalAnomalyResultRepository = originalAnomalyResultRepository;
     this.objectMapper = objectMapper;
+    this.maintenanceRecordRepository = maintenanceRecordRepository;
   }
 
   // ---- CRUD: transformers ----
@@ -797,4 +808,295 @@ public class TransformerController {
 
     return ResponseEntity.ok(response);
   }
+  // ---- FR4.x: Maintenance Records ----
+
+  /**
+   * FR4.1: Generate Maintenance Record Form
+   *
+   * Returns a form payload containing:
+   *  - Transformer metadata
+   *  - Inspection info
+   *  - Maintenance image info (for thumbnail)
+   *  - Detected anomalies for that image
+   *  - Display metadata (box colors)
+   *  - Allowed statuses
+   *  - Existing record (if already saved for this image)
+   *
+   * Frontend can use this to render a combined "system-generated" + "editable" view.
+   */
+  @GetMapping("/{id}/maintenance-record-form")
+  public ResponseEntity<MaintenanceRecordFormDTO> getMaintenanceRecordForm(
+          @PathVariable Long id,
+          @RequestParam(value = "inspectionId", required = false) Long inspectionId,
+          @RequestParam(value = "imageId", required = false) Long imageId) {
+
+      Transformer t = get(id); // uses existing get()
+
+      // 1) Resolve inspection
+      Inspection inspection = null;
+      if (inspectionId != null) {
+          inspection = inspectionRepository.findById(inspectionId)
+                  .orElseThrow(() -> new NotFoundException("Inspection " + inspectionId + " not found"));
+          if (inspection.getTransformer() == null ||
+              !Objects.equals(inspection.getTransformer().getId(), id)) {
+              throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                      "Inspection does not belong to this transformer");
+          }
+      }
+
+      // 2) Resolve maintenance image
+      TransformerImage maintenanceImage = null;
+      if (imageId != null) {
+          maintenanceImage = images.findById(imageId)
+                  .orElseThrow(() -> new NotFoundException("Image " + imageId + " not found"));
+          if (!Objects.equals(maintenanceImage.getTransformer().getId(), id)) {
+              throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                      "Image does not belong to this transformer");
+          }
+          if (maintenanceImage.getImageType() != ImageType.MAINTENANCE) {
+              throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                      "Maintenance record form requires a MAINTENANCE image");
+          }
+          if (inspection == null && maintenanceImage.getInspection() != null) {
+              inspection = maintenanceImage.getInspection();
+          }
+      } else {
+          // Fallback: find latest MAINTENANCE image for this transformer
+          List<TransformerImage> allMaint = images.findByTransformerIdAndImageTypeOrderByCreatedAtDesc(
+                  id, ImageType.MAINTENANCE);
+          if (!allMaint.isEmpty()) {
+              maintenanceImage = allMaint.get(0);
+              if (inspection == null) {
+                  inspection = maintenanceImage.getInspection();
+              }
+          }
+      }
+
+      if (maintenanceImage == null) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                  "No maintenance image found or provided for this transformer");
+      }
+
+      // 3) Fetch anomalies + display metadata
+      List<FaultRegion> faultRegions = faultRegionRepository
+              .findByImageIdOrderByRegionIdAsc(maintenanceImage.getId());
+      List<FaultRegionDTO> anomalyDTOs = faultRegions.stream()
+              .map(FaultRegionDTO::fromEntity)
+              .toList();
+
+      Map<String, String> boxColors = new HashMap<>();
+      Optional<DisplayMetadata> dmOpt = displayMetadataRepository.findByImageId(maintenanceImage.getId());
+      if (dmOpt.isPresent() && dmOpt.get().getBoxColors() != null) {
+          boxColors.putAll(dmOpt.get().getBoxColors());
+      }
+
+      // 4) Existing record (if any) for this maintenance image
+      MaintenanceRecordDTO existingRecordDTO = maintenanceRecordRepository
+              .findByMaintenanceImageId(maintenanceImage.getId())
+              .map(MaintenanceRecordDTO::fromEntity)
+              .orElse(null);
+
+      // 5) Build DTOs
+      TransformerDTO transformerDTO = new TransformerDTO(
+        t.getId(),
+        t.getTransformerNo(),
+        t.getPoleNo(),
+        t.getRegion(),
+        t.getTransformerType()
+    );
+
+      InspectionDTO inspectionDTO = (inspection == null) ? null : InspectionDTO.fromEntity(inspection);
+
+      TransformerImageDTO imageDTO = new TransformerImageDTO(
+              maintenanceImage.getId(),
+              maintenanceImage.getImageType(),
+              maintenanceImage.getUploader(),
+              maintenanceImage.getEnvCondition(),
+              maintenanceImage.getFilename(),
+              maintenanceImage.getCreatedAt(),
+              maintenanceImage.getContentType(),
+              maintenanceImage.getSizeBytes(),
+              maintenanceImage.getInspection() == null ? null : maintenanceImage.getInspection().getId()
+      );
+
+      MaintenanceRecordFormDTO formDTO = new MaintenanceRecordFormDTO(
+              transformerDTO,
+              inspectionDTO,
+              imageDTO,
+              anomalyDTOs,
+              boxColors,
+              Arrays.asList(MaintenanceStatus.values()),
+              existingRecordDTO
+      );
+
+      return ResponseEntity.ok(formDTO);
+  }
+
+
+  /**
+   * FR4.2 / FR4.3: Save a completed maintenance record.
+   *
+   * Associates the record with:
+   *  - transformer
+   *  - inspection (optional; will use image's inspection if not provided)
+   *  - maintenance image
+   */
+  @PostMapping("/{id}/maintenance-records")
+  public ResponseEntity<MaintenanceRecordDTO> createMaintenanceRecord(
+          @PathVariable Long id,
+          @RequestBody @Valid CreateMaintenanceRecordDTO body) {
+
+      if (!id.equals(body.transformerId())) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                  "Transformer ID in path does not match transformerId in body");
+      }
+
+      Transformer transformer = transformers.findById(id)
+              .orElseThrow(() -> new NotFoundException("Transformer " + id + " not found"));
+
+      TransformerImage image = images.findById(body.maintenanceImageId())
+              .orElseThrow(() -> new NotFoundException("Image " + body.maintenanceImageId() + " not found"));
+
+      if (!Objects.equals(image.getTransformer().getId(), id)) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                  "Maintenance image does not belong to this transformer");
+      }
+
+      if (image.getImageType() != ImageType.MAINTENANCE) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                  "Maintenance records can only be created for MAINTENANCE images");
+      }
+
+      // Resolve inspection
+      Inspection inspection = null;
+      if (body.inspectionId() != null) {
+          inspection = inspectionRepository.findById(body.inspectionId())
+                  .orElseThrow(() -> new NotFoundException("Inspection " + body.inspectionId() + " not found"));
+          if (inspection.getTransformer() == null ||
+              !Objects.equals(inspection.getTransformer().getId(), id)) {
+              throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                      "Inspection does not belong to this transformer");
+          }
+      } else if (image.getInspection() != null) {
+          inspection = image.getInspection();
+      }
+
+      // Prevent duplicate record for same image (optional, but usually sensible)
+      if (maintenanceRecordRepository.findByMaintenanceImageId(image.getId()).isPresent()) {
+          throw new ResponseStatusException(HttpStatus.CONFLICT,
+                  "A maintenance record already exists for this image. Use PUT to update.");
+      }
+
+      LocalDateTime inspectionTimestamp = body.inspectionTimestamp();
+      if (inspectionTimestamp == null) {
+          if (inspection != null && inspection.getCreatedAt() != null) {
+              inspectionTimestamp = inspection.getCreatedAt();
+          } else {
+              inspectionTimestamp = image.getCreatedAt();
+          }
+      }
+
+      MaintenanceRecord rec = MaintenanceRecord.builder()
+              .transformer(transformer)
+              .inspection(inspection)
+              .maintenanceImage(image)
+              .inspectionTimestamp(inspectionTimestamp)
+              .inspectorName(body.inspectorName())
+              .status(body.status())
+              .electricalReadings(
+                      body.electricalReadings() == null
+                              ? new HashMap<>()
+                              : new HashMap<>(body.electricalReadings()))
+              .recommendedAction(body.recommendedAction())
+              .additionalRemarks(body.additionalRemarks())
+              .createdAt(LocalDateTime.now())
+              .updatedAt(LocalDateTime.now())
+              .build();
+
+      maintenanceRecordRepository.save(rec);
+
+      return ResponseEntity.status(HttpStatus.CREATED).body(MaintenanceRecordDTO.fromEntity(rec));
+  }
+  @PutMapping("/maintenance-records/{recordId}")
+  public ResponseEntity<MaintenanceRecordDTO> updateMaintenanceRecord(
+          @PathVariable Long recordId,
+          @RequestBody @Valid UpdateMaintenanceRecordDTO body) {
+
+      if (!recordId.equals(body.id())) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                  "Record ID in path does not match id in body");
+      }
+
+      MaintenanceRecord rec = maintenanceRecordRepository.findById(recordId)
+              .orElseThrow(() -> new NotFoundException("Maintenance record " + recordId + " not found"));
+
+      // Patch-style update: only update non-null fields
+      if (body.inspectionId() != null) {
+          Inspection inspection = inspectionRepository.findById(body.inspectionId())
+                  .orElseThrow(() -> new NotFoundException("Inspection " + body.inspectionId() + " not found"));
+          // sanity check transformer match
+          if (inspection.getTransformer() != null &&
+                  !Objects.equals(inspection.getTransformer().getId(), rec.getTransformer().getId())) {
+              throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                      "Inspection does not belong to the same transformer as this record");
+          }
+          rec.setInspection(inspection);
+      }
+
+      if (body.inspectionTimestamp() != null) {
+          rec.setInspectionTimestamp(body.inspectionTimestamp());
+      }
+
+      if (body.inspectorName() != null) {
+          rec.setInspectorName(body.inspectorName());
+      }
+
+      if (body.status() != null) {
+          rec.setStatus(body.status());
+      }
+
+      if (body.electricalReadings() != null) {
+          rec.setElectricalReadings(new HashMap<>(body.electricalReadings()));
+      }
+
+      if (body.recommendedAction() != null) {
+          rec.setRecommendedAction(body.recommendedAction());
+      }
+
+      if (body.additionalRemarks() != null) {
+          rec.setAdditionalRemarks(body.additionalRemarks());
+      }
+
+      rec.setUpdatedAt(LocalDateTime.now());
+      maintenanceRecordRepository.save(rec);
+
+      return ResponseEntity.ok(MaintenanceRecordDTO.fromEntity(rec));
+  }
+  /**
+ * FR4.3: View all past maintenance records for a given transformer.
+ */
+  @GetMapping("/{id}/maintenance-records")
+  public List<MaintenanceRecordDTO> listMaintenanceRecords(@PathVariable Long id) {
+      if (!transformers.existsById(id)) {
+          throw new NotFoundException("Transformer " + id + " not found");
+      }
+
+      return maintenanceRecordRepository
+              .findByTransformerIdOrderByInspectionTimestampDesc(id)
+              .stream()
+              .map(MaintenanceRecordDTO::fromEntity)
+              .toList();
+  }
+
+  /**
+   * Optional: Fetch a single maintenance record by ID (e.g. for detail view).
+   */
+  @GetMapping("/maintenance-records/{recordId}")
+  public ResponseEntity<MaintenanceRecordDTO> getMaintenanceRecord(@PathVariable Long recordId) {
+      return maintenanceRecordRepository.findById(recordId)
+              .map(rec -> ResponseEntity.ok(MaintenanceRecordDTO.fromEntity(rec)))
+              .orElse(ResponseEntity.notFound().build());
+  }
+
+
 }

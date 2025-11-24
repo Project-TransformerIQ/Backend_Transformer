@@ -1,0 +1,5 @@
+spring:
+  profiles:
+    active: dev
+  flyway:
+    enabled: false  # temporarily, until you add migrations
