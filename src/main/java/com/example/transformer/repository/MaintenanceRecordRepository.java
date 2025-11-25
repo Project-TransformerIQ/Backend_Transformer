@@ -19,4 +19,11 @@ public interface MaintenanceRecordRepository extends JpaRepository<MaintenanceRe
     @Transactional
     @Modifying
     void deleteByInspectionId(Long inspectionId);
+    @Transactional
+    @Modifying
+    void deleteByMaintenanceImageId(Long maintenanceImageId);
+
+    @Transactional
+    @Modifying
+    void deleteByTransformerId(Long transformerId);
 }

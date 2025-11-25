@@ -129,11 +129,65 @@ public class TransformerController {
   }
 
   @DeleteMapping("/{id}")
-  public void delete(@PathVariable Long id) {
-    if (!transformers.existsById(id))
-      throw new NotFoundException("Transformer " + id + " not found");
-    transformers.deleteById(id);
+  public ResponseEntity<Void> delete(@PathVariable Long id) {
+
+      // 1. Load transformer or 404
+      Transformer t = transformers.findById(id)
+              .orElseThrow(() -> new NotFoundException("Transformer " + id + " not found"));
+
+      // 2. Clean up all inspections belonging to this transformer
+      List<Inspection> inspections = inspectionRepository
+              .findByTransformerIdOrderByCreatedAtDesc(id);
+
+      for (Inspection ins : inspections) {
+          Long inspectionId = ins.getId();
+
+          // 2a. Delete maintenance records linked to this inspection
+          maintenanceRecordRepository.deleteByInspectionId(inspectionId);
+
+          // 2b. Delete images linked to this inspection
+          List<TransformerImage> imgs = images.findByInspectionId(inspectionId);
+          for (TransformerImage img : imgs) {
+              Long imgId = img.getId();
+
+              // Delete anomaly-related data for this image
+              originalAnomalyResultRepository.deleteByImageId(imgId);
+              faultRegionRepository.deleteByImageId(imgId);
+              displayMetadataRepository.deleteByImageId(imgId);
+
+              // Delete any maintenance records tied specifically to this image
+              maintenanceRecordRepository.deleteByMaintenanceImageId(imgId);
+
+              // Finally delete the image itself
+              images.delete(img);
+          }
+
+          // 2c. Delete the inspection row itself
+          inspectionRepository.delete(ins);
+      }
+
+      // 3. Clean up any remaining images for this transformer (e.g. baseline images not tied to inspections)
+      List<TransformerImage> remainingImages = images.findByTransformerIdOrderByCreatedAtDesc(id);
+      for (TransformerImage img : remainingImages) {
+          Long imgId = img.getId();
+
+          originalAnomalyResultRepository.deleteByImageId(imgId);
+          faultRegionRepository.deleteByImageId(imgId);
+          displayMetadataRepository.deleteByImageId(imgId);
+          maintenanceRecordRepository.deleteByMaintenanceImageId(imgId);
+
+          images.delete(img);
+      }
+
+      // 4. As extra safety, delete any remaining maintenance records directly linked to this transformer
+      maintenanceRecordRepository.deleteByTransformerId(id);
+
+      // 5. Finally delete the transformer itself
+      transformers.delete(t);
+
+      return ResponseEntity.noContent().build();
   }
+
 
   // ---- Upload image (baseline/maintenance) ----
   // Expect multipart with parts:
