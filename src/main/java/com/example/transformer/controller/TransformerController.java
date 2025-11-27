@@ -48,6 +48,13 @@ import com.example.transformer.repository.OriginalAnomalyResultRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+
+import com.example.transformer.security.CurrentUserHolder;
+import com.example.transformer.security.SessionUser;
+import com.example.transformer.model.UserOccupation;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
+
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -1069,6 +1076,15 @@ public class TransformerController {
   public ResponseEntity<MaintenanceRecordDTO> createMaintenanceRecord(
           @PathVariable Long id,
           @RequestBody @Valid CreateMaintenanceRecordDTO body) {
+      
+
+      SessionUser current = CurrentUserHolder.get();
+      if (current == null || current.occupation() != UserOccupation.MAINTENANCE_ENGINEER) {
+          throw new ResponseStatusException(
+                  HttpStatus.FORBIDDEN,
+                  "Only maintenance engineers can modify maintenance records"
+          );
+      }
 
       if (!id.equals(body.transformerId())) {
           throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -1145,6 +1161,13 @@ public class TransformerController {
   public ResponseEntity<MaintenanceRecordDTO> updateMaintenanceRecord(
           @PathVariable Long recordId,
           @RequestBody @Valid UpdateMaintenanceRecordDTO body) {
+      SessionUser current = CurrentUserHolder.get();
+      if (current == null || current.occupation() != UserOccupation.MAINTENANCE_ENGINEER) {
+          throw new ResponseStatusException(
+                  HttpStatus.FORBIDDEN,
+                  "Only maintenance engineers can modify maintenance records"
+          );
+      }
 
       if (!recordId.equals(body.id())) {
           throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
