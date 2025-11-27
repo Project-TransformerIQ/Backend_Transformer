@@ -15,7 +15,8 @@ public record FaultRegionDTO(
     Boolean elongated,
     Boolean connectedToWire,
     String tag,
-    Double confidence
+    Double confidence,
+    String created_by
 ) {
     public static FaultRegionDTO fromEntity(FaultRegion entity) {
         BoundingBoxDTO boundingBoxDTO = null;
@@ -42,7 +43,8 @@ public record FaultRegionDTO(
             entity.getElongated(),
             entity.getConnectedToWire(),
             entity.getTag(),
-            entity.getConfidence()
+            entity.getConfidence(),
+            entity.getCreatedBy()
         );
     }
 
